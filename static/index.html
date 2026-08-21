@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>삼삼수학 - 오늘의 문제</title>
+    <style>
+        body { font-family: 'Pretendard', sans-serif; padding: 20px; line-height: 1.6; }
+        .container { max-width: 500px; margin: 0 auto; }
+        input, textarea { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 8px; }
+        button { width: 100%; padding: 15px; background-color: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>수학 문제 풀기 ✏️</h2>
+        <input type="text" id="question" placeholder="문제를 입력하세요 (예: 2x+4=10)">
+        <input type="text" id="answer" placeholder="정답을 입력하세요 (예: x=3)">
+        <button onclick="submitProblem()">제출하고 채점받기</button>
+        <p id="result"></p>
+    </div>
+
+    <script>
+        async function submitProblem() {
+            const question = document.getElementById('question').value;
+            const student_answer = document.getElementById('answer').value;
+            
+            const response = await fetch('/api/check-math', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question, student_answer })
+            });
+            const data = await response.json();
+            document.getElementById('result').innerText = "AI 선생님의 답: " + data.ai_review;
+        }
+    </script>
+</body>
+</html>
