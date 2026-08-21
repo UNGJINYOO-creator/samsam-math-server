@@ -10,9 +10,11 @@
         h2 { color: #2d3748; text-align: center; margin-bottom: 15px; }
         button { background: #4f46e5; color: white; border: none; padding: 12px; font-size: 16px; border-radius: 10px; cursor: pointer; width: 100%; font-weight: bold; margin-top: 10px; }
         .problem-box { background: #edf2f7; padding: 15px; border-radius: 12px; margin-top: 15px; font-size: 18px; line-height: 1.5; color: #4a5568; }
-        .canvas-container { margin-top: 15px; border: 2px dashed #cbd5e1; border-radius: 12px; background: #fff; position: relative; overflow: hidden; }
+        .canvas-container { margin-top: 15px; border: 2px solid #cbd5e1; border-radius: 12px; background: #ffffff; position: relative; overflow: hidden; }
         canvas { display: block; touch-action: none; cursor: crosshair; width: 100%; height: 250px; }
-        .result { margin-top: 15px; font-weight: bold; font-size: 16px; text-align: center; white-space: pre-line; }
+        .result { margin-top: 20px; padding: 15px; border-radius: 10px; font-size: 16px; line-height: 1.6; white-space: pre-line; display: none; }
+        .correct-box { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+        .wrong-box { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
     </style>
 </head>
 <body>
@@ -39,9 +41,11 @@
         const ctx = canvas.getContext('2d');
         
         function resizeCanvas() {
-            const rect = canvas.getBoundingClientRect();
             canvas.width = canvas.parentElement.clientWidth;
             canvas.height = 250;
+            // 항상 하얀 배경을 깔아줍니다 (투명 방지)
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.strokeStyle = '#1e293b';
             ctx.lineWidth = 3;
             ctx.lineCap = 'round';
@@ -71,20 +75,21 @@
         canvas.addEventListener('mouseup', () => drawing = false);
         canvas.addEventListener('mouseleave', () => drawing = false);
 
-        // 갤럭시탭 터치 및 S펜 완벽 대응
         canvas.addEventListener('touchstart', (e) => { drawing = true; const pos = getPos(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y); e.preventDefault(); });
         canvas.addEventListener('touchmove', (e) => { if (!drawing) return; const pos = getPos(e); ctx.lineTo(pos.x, pos.y); ctx.stroke(); e.preventDefault(); });
         canvas.addEventListener('touchend', () => drawing = false);
 
         function clearCanvas() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
 
         async function getProblem() {
             document.getElementById('problemContainer').style.display = 'block';
-            document.getElementById('questionText').innerText = "AI가 문제를 만드는 중입니다... ✍️";
+            document.getElementById('questionText').innerText = "AI가 만드는 중... ✍️";
             clearCanvas();
-            document.getElementById('resultText').innerText = "";
+            const resDiv = document.getElementById('resultText');
+            resDiv.style.display = 'none';
 
             const res = await fetch('/generate-problem');
             const data = await res.json();
@@ -94,8 +99,11 @@
 
         async function submitAnswer() {
             const resDiv = document.getElementById('resultText');
+            resDiv.style.display = 'block';
+            resDiv.className = "result";
+            resDiv.style.background = "#f1f5f9";
             resDiv.style.color = "#4a5568";
-            resDiv.innerText = "🧐 AI 선생님이 아들의 필기를 분석 중입니다...";
+            resDiv.innerText = "🧐 AI 선생님이 아들의 손글씨 풀이를 꼼꼼히 읽고 있습니다...";
 
             const imageBase64 = canvas.toDataURL('image/png');
 
@@ -107,11 +115,11 @@
             const data = await res.json();
 
             if(data.is_correct) {
-                resDiv.style.color = "#10b981";
-                resDiv.innerText = "🎉 정답입니다! 완벽해요!\n" + data.feedback;
+                resDiv.className = "result correct-box";
+                resDiv.innerText = "🎉 정답입니다! 참 잘했어요!\n\n[해설 및 피드백]\n" + data.feedback;
             } else {
-                resDiv.style.color = "#ef4444";
-                resDiv.innerText = "❌ 틀렸어요!\n" + data.feedback;
+                resDiv.className = "result wrong-box";
+                resDiv.innerText = "❌ 틀렸어요! 다시 생각해 볼까요?\n\n[친절한 해설 및 힌트]\n" + data.feedback;
             }
         }
     </script>
