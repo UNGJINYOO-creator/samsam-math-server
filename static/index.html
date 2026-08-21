@@ -5,34 +5,58 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>삼삼수학 - AI 수학 과외</title>
     <style>
-        body { font-family: 'Malgun Gothic', sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        .container { width: 100%; max-width: 500px; background: white; padding: 20px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
-        h2 { color: #2d3748; text-align: center; margin-bottom: 15px; }
-        button { background: #4f46e5; color: white; border: none; padding: 12px; font-size: 16px; border-radius: 10px; cursor: pointer; width: 100%; font-weight: bold; margin-top: 10px; }
-        .problem-box { background: #edf2f7; padding: 15px; border-radius: 12px; margin-top: 15px; font-size: 18px; line-height: 1.5; color: #4a5568; }
-        .canvas-container { margin-top: 15px; border: 2px solid #cbd5e1; border-radius: 12px; background: #ffffff; position: relative; overflow: hidden; }
-        canvas { display: block; touch-action: none; cursor: crosshair; width: 100%; height: 250px; }
-        .result { margin-top: 20px; padding: 15px; border-radius: 10px; font-size: 16px; line-height: 1.6; white-space: pre-line; display: none; }
+        body { font-family: 'Malgun Gothic', sans-serif; background-color: #f4f6f9; margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; height: 100vh; box-sizing: border-box; }
+        .app-header { width: 100%; max-width: 900px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        h2 { color: #2d3748; margin: 0; font-size: 22px; }
+        .main-layout { display: flex; width: 100%; max-width: 900px; gap: 15px; flex: 1; min-height: 0; }
+        
+        /* 왼쪽: 문제 영역 (작고 컴팩트하게) */
+        .left-panel { width: 32%; background: white; padding: 15px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: flex; flex-direction: column; justify-content: space-between; }
+        .problem-box { background: #edf2f7; padding: 12px; border-radius: 12px; font-size: 16px; line-height: 1.5; color: #4a5568; flex: 1; overflow-y: auto; margin-bottom: 10px; }
+        
+        /* 오른쪽: 필기 영역 (큼직하게) */
+        .right-panel { width: 68%; background: white; padding: 15px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: flex; flex-direction: column; }
+        .canvas-container { border: 2px solid #cbd5e1; border-radius: 12px; background: #ffffff; flex: 1; position: relative; overflow: hidden; }
+        canvas { display: block; touch-action: none; cursor: crosshair; width: 100%; height: 100%; }
+        
+        .btn { background: #4f46e5; color: white; border: none; padding: 12px; font-size: 15px; border-radius: 10px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 5px; }
+        .btn-secondary { background: #94a3b8; padding: 8px; font-size: 13px; }
+        .btn-submit { background: #10b981; }
+        
+        .result { margin-top: 10px; padding: 12px; border-radius: 10px; font-size: 14px; line-height: 1.5; white-space: pre-line; display: none; max-height: 120px; overflow-y: auto; }
         .correct-box { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
         .wrong-box { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>✨ 삼삼수학 AI 선생님 ✨</h2>
-        <button onclick="getProblem()">새로운 문제 받기</button>
-        
-        <div id="problemContainer" class="problem-box" style="display:none;">
-            <p id="questionText">문제를 불러오는 중...</p>
-            
-            <p style="margin: 10px 0 5px 0; font-size: 14px; font-weight: bold; color: #64748b;">✍️ 아래 빈칸에 손으로 풀이를 적어보세요:</p>
+    <div class="app-header">
+        <h2>✨ 삼삼수학 AI 선생님</h2>
+        <button class="btn" style="width: auto; padding: 8px 16px; margin: 0;" onclick="getProblem()">새로운 문제 받기</button>
+    </div>
+
+    <div class="main-layout">
+        <!-- 왼쪽: 문제 및 결과 -->
+        <div class="left-panel">
+            <div>
+                <p style="margin: 0 0 8px 0; font-weight: bold; color: #64748b; font-size: 14px;">📝 오늘의 문제</p>
+                <div id="problemContainer" class="problem-box">위쪽의 [새로운 문제 받기] 버튼을 눌러주세요!</div>
+            </div>
+            <div>
+                <button class="btn btn-submit" onclick="submitAnswer()">정답 및 필기 채점하기</button>
+                <div id="resultText" class="result"></div>
+            </div>
+        </div>
+
+        <!-- 오른쪽: 대형 필기장 -->
+        <div class="right-panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                <span style="font-weight: bold; color: #64748b; font-size: 14px;">✍️ 여기에 손글씨로 풀이를 적어보세요</span>
+                <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="clearCanvas()">필기 지우기</button>
+            </div>
             <div class="canvas-container">
                 <canvas id="pad"></canvas>
             </div>
-            <button onclick="clearCanvas()" style="background: #94a3b8; padding: 8px; font-size: 14px;">필기 지우기</button>
-            <button onclick="submitAnswer()" style="background: #10b981;">정답 및 필기 채점하기</button>
         </div>
-        <div id="resultText" class="result"></div>
     </div>
 
     <script>
@@ -42,32 +66,26 @@
         
         function resizeCanvas() {
             canvas.width = canvas.parentElement.clientWidth;
-            canvas.height = 250;
-            // 항상 하얀 배경을 깔아줍니다 (투명 방지)
+            canvas.height = canvas.parentElement.clientHeight;
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.strokeStyle = '#1e293b';
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 4;
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
         }
         window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+        setTimeout(resizeCanvas, 100);
 
         let drawing = false;
-
         function getPos(e) {
             const rect = canvas.getBoundingClientRect();
-            let clientX = e.clientX;
-            let clientY = e.clientY;
+            let clientX = e.clientX, clientY = e.clientY;
             if (e.touches && e.touches.length > 0) {
                 clientX = e.touches[0].clientX;
                 clientY = e.touches[0].clientY;
             }
-            return {
-                x: clientX - rect.left,
-                y: clientY - rect.top
-            };
+            return { x: clientX - rect.left, y: clientY - rect.top };
         }
 
         canvas.addEventListener('mousedown', (e) => { drawing = true; const pos = getPos(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y); });
@@ -85,8 +103,8 @@
         }
 
         async function getProblem() {
-            document.getElementById('problemContainer').style.display = 'block';
-            document.getElementById('questionText').innerText = "AI가 만드는 중... ✍️";
+            const pBox = document.getElementById('problemContainer');
+            pBox.innerText = "AI가 문제를 만드는 중... ✍️";
             clearCanvas();
             const resDiv = document.getElementById('resultText');
             resDiv.style.display = 'none';
@@ -94,16 +112,20 @@
             const res = await fetch('/generate-problem');
             const data = await res.json();
             currentProblem = data.problem;
-            document.getElementById('questionText').innerText = currentProblem;
+            pBox.innerText = currentProblem;
         }
 
         async function submitAnswer() {
+            if(!currentProblem) {
+                alert("먼저 문제를 받아주세요!");
+                return;
+            }
             const resDiv = document.getElementById('resultText');
             resDiv.style.display = 'block';
             resDiv.className = "result";
             resDiv.style.background = "#f1f5f9";
             resDiv.style.color = "#4a5568";
-            resDiv.innerText = "🧐 AI 선생님이 아들의 손글씨 풀이를 꼼꼼히 읽고 있습니다...";
+            resDiv.innerText = "🧐 AI가 필기를 분석 중...";
 
             const imageBase64 = canvas.toDataURL('image/png');
 
@@ -116,10 +138,10 @@
 
             if(data.is_correct) {
                 resDiv.className = "result correct-box";
-                resDiv.innerText = "🎉 정답입니다! 참 잘했어요!\n\n[해설 및 피드백]\n" + data.feedback;
+                resDiv.innerText = "🎉 정답!\n" + data.feedback;
             } else {
                 resDiv.className = "result wrong-box";
-                resDiv.innerText = "❌ 틀렸어요! 다시 생각해 볼까요?\n\n[친절한 해설 및 힌트]\n" + data.feedback;
+                resDiv.innerText = "❌ 오답!\n" + data.feedback;
             }
         }
     </script>
