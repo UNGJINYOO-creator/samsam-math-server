@@ -8,7 +8,9 @@ app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-client = genai.Client()
+# Render에 등록된 환경 변수 키를 명시적으로 가져와서 클라이언트를 초기화합니다.
+api_key = os.environ.get("GEMINI_API_KEY")
+client = genai.Client(api_key=api_key)
 
 @app.get("/")
 def read_index():
