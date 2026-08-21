@@ -3,79 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>삼삼수학 - AI 수학 선생님</title>
+    <title>삼삼수학 - AI 수학 과외</title>
     <style>
         body { font-family: 'Malgun Gothic', sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        .container { width: 100%; max-width: 500px; background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); margin-top: 20px; }
-        h2 { color: #2d3748; text-align: center; margin-bottom: 20px; }
-        button { background: #4f46e5; color: white; border: none; padding: 15px; font-size: 18px; border-radius: 12px; cursor: pointer; width: 100%; font-weight: bold; margin-top: 10px; }
-        button:hover { background: #4338ca; }
-        .problem-box { background: #edf2f7; padding: 20px; border-radius: 15px; margin-top: 20px; font-size: 18px; line-height: 1.5; white-space: pre-line; color: #4a5568; }
-        input[type="text"] { width: calc(100% - 22px); padding: 12px; margin-top: 15px; font-size: 16px; border: 1px solid #cbd5e1; border-radius: 8px; }
-        .result { margin-top: 15px; font-weight: bold; font-size: 16px; text-align: center; }
+        .container { width: 100%; max-width: 500px; background: white; padding: 20px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        h2 { color: #2d3748; text-align: center; margin-bottom: 15px; }
+        button { background: #4f46e5; color: white; border: none; padding: 12px; font-size: 16px; border-radius: 10px; cursor: pointer; width: 100%; font-weight: bold; margin-top: 10px; }
+        .problem-box { background: #edf2f7; padding: 15px; border-radius: 12px; margin-top: 15px; font-size: 18px; line-height: 1.5; color: #4a5568; }
+        .canvas-container { margin-top: 15px; border: 2px dashed #cbd5e1; border-radius: 12px; background: #fff; position: relative; }
+        canvas { display: block; touch-action: none; cursor: crosshair; width: 100%; height: 250px; }
+        .result { margin-top: 15px; font-weight: bold; font-size: 16px; text-align: center; white-space: pre-line; }
     </style>
 </head>
 <body>
     <div class="container">
         <h2>✨ 삼삼수학 AI 선생님 ✨</h2>
-        <button onclick="getProblem()">새로운 문제 받아오기</button>
+        <button onclick="getProblem()">새로운 문제 받기</button>
         
         <div id="problemContainer" class="problem-box" style="display:none;">
-            <p id="questionText">AI가 문제를 만드는 중... ✍️</p>
-            <input type="text" id="userAnswer" placeholder="정답을 입력하세요 (예: x=3)">
-            <button onclick="checkAnswer()" style="background: #10b981;">정답 제출하기</button>
+            <p id="questionText">문제를 불러오는 중...</p>
+            
+            <p style="margin: 10px 0 5px 0; font-size: 14px; font-weight: bold; color: #64748b;">✍️ 아래 빈칸에 손으로 풀이를 적어보세요:</p>
+            <div class="canvas-container">
+                <canvas id="pad"></canvas>
+            </div>
+            <button onclick="clearCanvas()" style="background: #94a3b8; padding: 8px; font-size: 14px;">필기 지우기</button>
+            <button onclick="submitAnswer()" style="background: #10b981;">정답 및 필기 채점하기</button>
         </div>
         <div id="resultText" class="result"></div>
     </div>
 
     <script>
-        let currentProblemText = "";
+        let currentProblem = "";
+        const canvas = document.getElementById('pad');
+        const ctx = canvas.getContext('2d');
+        
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = 250;
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
 
-        async function getProblem() {
-            const container = document.getElementById('problemContainer');
-            const text = document.getElementById('questionText');
-            document.getElementById('userAnswer').value = "";
-            document.getElementById('resultText').innerText = "";
-            container.style.display = 'block';
-            text.innerText = "열심히 문제를 만드는 중입니다... ✍️";
+        let drawing = false;
+        canvas.addEventListener('pointerdown', (e) => { drawing = true; ctx.beginPath(); ctx.moveTo(e.offsetX, e.offsetY); });
+        canvas.addEventListener('pointermove', (e) => { if (!drawing) return; ctx.lineTo(e.offsetX, e.offsetY); ctx.stroke(); });
+        canvas.addEventListener('pointerup', () => drawing = false);
 
-            try {
-                const response = await fetch('/generate-problem'); 
-                const data = await response.json();
-                text.innerText = data.problem;
-                currentProblemText = data.problem;
-            } catch (error) {
-                text.innerText = "오류 발생! 다시 눌러주세요.";
-            }
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
 
-        async function checkAnswer() {
-            const userAns = document.getElementById('userAnswer').value.trim();
-            const resDiv = document.getElementById('resultText');
-            if(!userAns) {
-                alert("정답을 입력해주세요!");
-                return;
-            }
-            resDiv.style.color = "#4a5568";
-            resDiv.innerText = "AI 선생님이 채점 중입니다... 🧐";
+        async function getProblem() {
+            document.getElementById('problemContainer').style.display = 'block';
+            document.getElementById('questionText').innerText = "AI가 문제를 만드는 중입니다... ✍️";
+            clearCanvas();
+            document.getElementById('resultText').innerText = "";
 
-            try {
-                const response = await fetch('/api/check-answer', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ problem: currentProblemText, answer: userAns })
-                });
-                const data = await response.json();
-                if(data.is_correct) {
-                    resDiv.style.color = "#10b981";
-                    resDiv.innerText = "🎉 정답입니다! 참 잘했어요!";
-                } else {
-                    resDiv.style.color = "#ef4444";
-                    resDiv.innerText = "❌ 틀렸어요! 해설: " + data.feedback;
-                }
-            } catch (e) {
+            const res = await fetch('/generate-problem');
+            const data = await res.json();
+            currentProblem = data.problem;
+            document.getElementById('questionText').innerText = currentProblem;
+        }
+
+        async function submitAnswer() {
+            const resDiv = document.getElementById('resultText');
+            resDiv.style.color = "#4a5568";
+            resDiv.innerText = "🧐 AI 선생님이 아들의 필기를 분석 중입니다...";
+
+            const imageBase64 = canvas.toDataURL('image/png');
+
+            const res = await fetch('/api/check-handwriting', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ problem: currentProblem, image: imageBase64 })
+            });
+            const data = await res.json();
+
+            if(data.is_correct) {
+                resDiv.style.color = "#10b981";
+                resDiv.innerText = "🎉 정답입니다! 완벽해요!\n" + data.feedback;
+            } else {
                 resDiv.style.color = "#ef4444";
-                resDiv.innerText = "채점 중 오류가 발생했습니다.";
+                resDiv.innerText = "❌ 틀렸어요!\n" + data.feedback;
             }
         }
     </script>
