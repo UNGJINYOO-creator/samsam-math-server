@@ -8,11 +8,9 @@ app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# 안전하게 제미나이 클라이언트 초기화 (환경 변수 자동 인식)
-try:
-    client = genai.Client()
-except Exception as e:
-    client = None
+# Render 환경 변수에서 키를 확실하게 가져옵니다
+api_key = os.environ.get("GEMINI_API_KEY")
+client = genai.Client(api_key=api_key) if api_key else None
 
 @app.get("/")
 def read_index():
@@ -22,7 +20,7 @@ def read_index():
 def generate_problem():
     try:
         if not client:
-            return {"problem": "AI 클라이언트가 초기화되지 않았습니다. API 키를 확인해주세요."}
+            return {"problem": "⚠️ API 키가 설정되지 않았거나 인식되지 않았습니다. Render Environment 설정을 확인해주세요."}
             
         response = client.models.generate_content(
             model='gemini-2.5-flash',
