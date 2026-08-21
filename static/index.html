@@ -1,37 +1,37 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <title>삼삼수학 - 오늘의 문제</title>
-    <style>
-        body { font-family: 'Pretendard', sans-serif; padding: 20px; line-height: 1.6; }
-        .container { max-width: 500px; margin: 0 auto; }
-        input, textarea { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ccc; border-radius: 8px; }
-        button { width: 100%; padding: 15px; background-color: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h2>수학 문제 풀기 ✏️</h2>
-        <input type="text" id="question" placeholder="문제를 입력하세요 (예: 2x+4=10)">
-        <input type="text" id="answer" placeholder="정답을 입력하세요 (예: x=3)">
-        <button onclick="submitProblem()">제출하고 채점받기</button>
-        <p id="result"></p>
-    </div>
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from google import genai
+import os
 
-    <script>
-        async function submitProblem() {
-            const question = document.getElementById('question').value;
-            const student_answer = document.getElementById('answer').value;
-            
-            const response = await fetch('/api/check-math', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question, student_answer })
-            });
-            const data = await response.json();
-            document.getElementById('result').innerText = "AI 선생님의 답: " + data.ai_review;
+app = FastAPI()
+
+# static 폴더 안의 파일들을 웹에서 접근할 수 있게 열어줍니다.
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# 제미나이 클라이언트 초기화 (환경 변수 또는 시스템에 설정된 키를 자동으로 사용합니다)
+client = genai.Client()
+
+@app.get("/")
+def read_index():
+    # 주소창에 딱 들어왔을 때 아들이 볼 수 있는 첫 화면(index.html)을 보여줍니다.
+    return FileResponse("static/index.html")
+
+@app.get("/generate-problem")
+def generate_problem():
+    try:
+        # 제미나이에게 중학교 1학년 수준의 수학 문제를 요청합니다.
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents='중학교 1학년 수준의 수학 연산 또는 방정식 문제 1개를 만들어줘. 반드시 딱 문제 내용과 정답만 알아보기 쉽게 간결하게 줘.',
+        )
+        
+        ai_text = response.text
+        
+        # 임시로 문제와 정답을 전달하는 구조 (필요에 따라 파싱 로직을 다듬을 수 있습니다)
+        return {
+            "problem": ai_text,
+            "answer": "확인"
         }
-    </script>
-</body>
-</html>
+    except Exception as e:
+        return {"problem": f"문제 생성 중 오류가 발생했습니다: {str(e)}", "answer": ""}
