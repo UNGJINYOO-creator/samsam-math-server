@@ -8,7 +8,7 @@ app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# 형의 API 키를 코드 안에 직접 안전하게 장착했습니다!
+# 형의 API 키 장착 완료
 client = genai.Client(api_key="AQ.Ab8RN6IaPcPW6b_i8dMpSYWQqKN187rXVC9j_S_y-9qW43cJTA")
 
 @app.get("/")
@@ -18,8 +18,9 @@ def read_index():
 @app.get("/generate-problem")
 def generate_problem():
     try:
+        # 에러 메시지가 안내한 최신 모델명으로 변경했습니다[cite: 1]
         response = client.models.generate_content(
-            model='gemini-2.5-flash',
+            model='gemini-3.6-flash',
             contents='중학교 1학년 수준의 수학 연산 또는 방정식 문제 1개를 만들어줘. 반드시 문제 내용만 깔끔하게 줘.',
         )
         return {"problem": response.text}
