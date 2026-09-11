@@ -32,4 +32,4 @@ DEFAULT_ANSWER_PAGE_HINT = "마지막 1~3페이지 부근에 있는 경우가 �
 import os
 
 # 계정/시점에 따라 사용 가능한 모델명이 다를 수 있으므로 환경변수로 override 가능하게 둔다.
-GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.5-flash")
+GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-3.6-flash")
