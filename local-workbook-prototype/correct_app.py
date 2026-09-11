@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import ANSWERS_FILENAME, BOUNDARIES_FILENAME, PAGES_DIRNAME, QUESTIONS_DIRNAME, RENDER_DPI
 from core.answer_parser import infer_answer_type, load_answers, save_answers
 from core.question_split import export_question_crops, load_boundaries, save_boundaries
+from ui_theme import inject_toss_style
 
 try:
     from streamlit_image_coordinates import streamlit_image_coordinates
@@ -179,6 +180,7 @@ def render_boundary_fix_tab(project_dir: Path):
 
 def main():
     st.set_page_config(page_title="문제집 디지털화 - 1분 눈 검수", layout="wide")
+    inject_toss_style()
     project_dir = get_project_dir()
     st.title("1분 눈 검수")
     st.caption(f"프로젝트: {project_dir}")
