@@ -113,6 +113,60 @@ def parse_answer_pages(pdf_path: str, page_numbers: list[int], use_ocr: bool = F
     return parse_answer_text(combined_text)
 
 
+LINE_START_MARKER_PATTERN = re.compile(r"^\s*0?(\d{1,3})[.\)]\s")
+
+
+def parse_explanation_text(text: str) -> dict:
+    """"정답과 해설"처럼 문항번호 뒤에 짧은 정답이 아니라 풀이 과정 전체가
+    딸려오는 형식을 파싱한다. answer_parser.parse_answer_text와 같은
+    "예상 다음 번호" 트릭을 쓰지만, 두 가지가 다르다.
+      1) 내용을 한 줄로 뭉치지 않고 문단 그대로 보존한다.
+      2) 문항 번호는 반드시 "줄 맨 앞"에서만 인정한다. 해설 문장 안에 있는
+         소수(예: 원주율 "3.14")의 "3."을 3번 문항 시작으로 오인해 해설이
+         잘리는 것을 막기 위해서다. (실제 교재는 각 문항 해설이 항상 새 줄에서
+         시작하므로 이 제약이 안전하다.)
+
+    주의: 일부 출판사 PDF는 수식 기호(도, 원주율, 비율 등)를 특수 폰트로
+    인코딩해서, 텍스트로 뽑으면 "!", "@", "`:`" 같은 글자로 깨져 나올 수 있다.
+    (해당 폰트의 글자-기호 매핑표가 없으면 일반적인 방법으로는 복원이 어렵다.)
+    이 경우 파싱된 해설이 읽기 어려울 수 있으니 1분 눈 검수에서 확인이 필요하다.
+    """
+    lines = text.split("\n")
+    expected = 1
+    starts: list[tuple[int, int]] = []  # (line_index, question_no)
+    for i, line in enumerate(lines):
+        m = LINE_START_MARKER_PATTERN.match(line)
+        if m and int(m.group(1)) == expected:
+            starts.append((i, expected))
+            expected += 1
+
+    explanations: dict = {}
+    for i, (line_i, no) in enumerate(starts):
+        end_line = starts[i + 1][0] if i + 1 < len(starts) else len(lines)
+        block = list(lines[line_i:end_line])
+        block[0] = LINE_START_MARKER_PATTERN.sub("", block[0], count=1)
+        raw = "\n".join(block).strip()
+        if raw:
+            explanations[str(no)] = raw
+    return explanations
+
+
+def parse_explanation_pages(pdf_path: str, page_numbers: list[int], use_ocr: bool = False) -> dict:
+    """"정답과 해설" 책자처럼 문항번호별 풀이 과정 전체가 있는 페이지들을 파싱해
+    {문항번호: 해설텍스트} 딱 만든다. run_split_and_parse.py --explanation-pages 에서 사용."""
+    combined_text = "\n".join(_extract_page_text(pdf_path, p, use_ocr=use_ocr) for p in page_numbers)
+    return parse_explanation_text(combined_text)
+
+
+def merge_explanations(answers: dict, explanations: dict) -> dict:
+    """answers[qno]["explanation"]에 해설 텍스트를 채워 넣는다.
+    answers.json에 없는 문항 번호의 해설은 무시한다."""
+    for qno, explanation in explanations.items():
+        if qno in answers:
+            answers[qno]["explanation"] = explanation
+    return answers
+
+
 def save_answers(path: Path, answers: dict) -> None:
     path.write_text(json.dumps(answers, ensure_ascii=False, indent=2), encoding="utf-8")
 

@@ -20,7 +20,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config import ANSWERS_FILENAME, LOG_FILENAME, QUESTIONS_DIRNAME
-from core.answer_parser import load_answers
+from core.answer_parser import load_answers, save_answers
 from core.grading import grade_answer
 from core.session_log import append_log, answered_question_nos, unit_review_summary
 from subjects.math.answer_rules import is_twin_question_eligible
@@ -103,6 +103,13 @@ def render_sidebar() -> tuple[Path, list[str]] | None:
 
 def log_attempt(log_path: Path, unit: str, qno: str, qtype: str, submitted: str, correct: bool, is_retry: bool):
     append_log(log_path, unit, qno, qtype, submitted, correct, is_retry=is_retry)
+
+
+def persist_field(project_dir: Path, answers: dict, qno: str, field: str, value: str):
+    """힌트/해설을 answers.json에 저장해두면, 같은 문제를 다시 만났을 때
+    Gemini를 다시 호출하지 않고 바로 보여줄 수 있어 훨씬 빠르다."""
+    answers[qno][field] = value
+    save_answers(project_dir / ANSWERS_FILENAME, answers)
 
 
 def render_summary(project_dir: Path, unit: str):
@@ -198,13 +205,18 @@ def render_question_card(project_dir: Path, unit: str, qnos: list[str]):
     if stage == "hint":
         st.error("오답이에요. 힌트를 보고 한 번 더 풀어볼까요?")
         if st.session_state.hint_text is None:
-            with st.spinner("힌트 만드는 중..."):
-                try:
-                    st.session_state.hint_text = generate_hint(img_path)
-                except HintExplainError as e:
-                    st.session_state.hint_text = f"(힌트를 불러올 수 없어요: {e})"
-                except Exception as e:  # Gemini 호출 실패 등 예상 못한 오류도 앱이 죽지 않게 처리
-                    st.session_state.hint_text = f"(힌트를 불러오는 중 오류가 발생했어요: {e})"
+            cached = meta.get("hint")
+            if cached:
+                st.session_state.hint_text = cached  # 이미 저장된 힌트 -> AI 호출 없이 즉시 표시
+            else:
+                with st.spinner("힌트 만드는 중... (처음 한 번만 걸리고, 다음부터는 즉시 나와요)"):
+                    try:
+                        st.session_state.hint_text = generate_hint(img_path)
+                        persist_field(project_dir, answers, qno, "hint", st.session_state.hint_text)
+                    except HintExplainError as e:
+                        st.session_state.hint_text = f"(힌트를 불러올 수 없어요: {e})"
+                    except Exception as e:  # Gemini 호출 실패 등 예상 못한 오류도 앱이 죽지 않게 처리
+                        st.session_state.hint_text = f"(힌트를 불러오는 중 오류가 발생했어요: {e})"
         st.info(f"💡 **힌트**\n\n{st.session_state.hint_text}")
 
         submitted2 = (
@@ -229,15 +241,24 @@ def render_question_card(project_dir: Path, unit: str, qnos: list[str]):
 
         if qtype != "essay":
             if st.session_state.explanation_text is None:
-                with st.spinner("해설 만드는 중..."):
-                    try:
-                        st.session_state.explanation_text = generate_explanation(
-                            img_path, st.session_state.get("last_wrong_2") or st.session_state.get("last_wrong_1") or "", correct_answer
-                        )
-                    except HintExplainError as e:
-                        st.session_state.explanation_text = f"(해설을 불러올 수 없어요: {e})"
-                    except Exception as e:
-                        st.session_state.explanation_text = f"(해설을 불러오는 중 오류가 발생했어요: {e})"
+                cached = meta.get("explanation")
+                if cached:
+                    # 정답지에서 미리 파싱해뒀거나 이전에 생성해둔 해설 -> AI 호출 없이 즉시 표시
+                    st.session_state.explanation_text = cached
+                else:
+                    with st.spinner("해설 만드는 중... (처음 한 번만 걸리고, 다음부터는 즉시 나와요)"):
+                        try:
+                            explanation = generate_explanation(
+                                img_path,
+                                st.session_state.get("last_wrong_2") or st.session_state.get("last_wrong_1") or "",
+                                correct_answer,
+                            )
+                            st.session_state.explanation_text = explanation
+                            persist_field(project_dir, answers, qno, "explanation", explanation)
+                        except HintExplainError as e:
+                            st.session_state.explanation_text = f"(해설을 불러올 수 없어요: {e})"
+                        except Exception as e:
+                            st.session_state.explanation_text = f"(해설을 불러오는 중 오류가 발생했어요: {e})"
             st.markdown("**📝 어디서 틀렸을까요?**")
             st.write(st.session_state.explanation_text)
 

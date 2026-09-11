@@ -13,6 +13,11 @@
 --answer-pages는 책 뒤편 "빠른 정답표"가 있는 실제 PDF 페이지 번호(1-based)를
 사람이 직접 넘겨준다 (표지/목차 등으로 정답표 위치가 책마다 달라 자동 탐지가
 불안정하므로, 이 값은 자동화하지 않고 사용자가 지정하는 것으로 설계했다).
+
+--explanation-pages (선택)는 "정답과 해설"처럼 문항별 풀이 과정 전체가 있는
+페이지를 추가로 넘기면, 그 해설을 answers.json에 저장해둔다. 태블릿 풀이
+화면에서 오답을 2번 틀렸을 때 이 해설을 즉시 보여주므로 Gemini 호출 없이
+빠르게 뜬다 (해설이 없는 문항만 Gemini로 생성).
 """
 import argparse
 import sys
@@ -21,7 +26,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import ANSWERS_FILENAME, BOUNDARIES_FILENAME, PAGES_DIRNAME, QUESTIONS_DIRNAME  # noqa: E402
-from core.answer_parser import parse_answer_pages, save_answers  # noqa: E402
+from core.answer_parser import (  # noqa: E402
+    merge_explanations,
+    parse_answer_pages,
+    parse_explanation_pages,
+    save_answers,
+)
 from core.page_render import render_pages  # noqa: E402
 from core.pdf_analysis import check_text_layer  # noqa: E402
 from core.question_split import build_all_boundaries, export_question_crops, save_boundaries  # noqa: E402
@@ -40,6 +50,11 @@ def main() -> None:
         "--answer-ocr",
         action="store_true",
         help="정답표 페이지에 텍스트 레이어가 없을 때(순수 이미지) 지정",
+    )
+    parser.add_argument(
+        "--explanation-pages",
+        default=None,
+        help="(선택) 문항별 풀이 과정 전체가 있는 '정답과 해설' 페이지 번호, 콤마로 구분",
     )
     args = parser.parse_args()
 
@@ -70,6 +85,13 @@ def main() -> None:
     print("4/4 정답표 파싱 중...")
     answer_pages = [int(p) for p in args.answer_pages.split(",")]
     answers = parse_answer_pages(args.pdf, answer_pages, use_ocr=args.answer_ocr)
+
+    if args.explanation_pages:
+        explanation_pages = [int(p) for p in args.explanation_pages.split(",")]
+        explanations = parse_explanation_pages(args.pdf, explanation_pages, use_ocr=args.answer_ocr)
+        answers = merge_explanations(answers, explanations)
+        print(f"  -> {len(explanations)}개 문항 해설도 함께 저장 (Gemini 호출 없이 즉시 표시됨)")
+
     save_answers(project_dir / ANSWERS_FILENAME, answers)
     print(f"  -> {len(answers)}개 문항 정답 파싱 -> {project_dir / ANSWERS_FILENAME}")
 
