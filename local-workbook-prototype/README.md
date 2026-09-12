@@ -16,6 +16,21 @@ pip install -r requirements.txt
 export GEMINI_API_KEY="여기에 본인 키"
 ```
 
+### Windows에서 매번 명령어 치기 귀찮다면 (더블클릭 실행)
+
+`pip install` 한 번만 터미널에서 해두면, 그 다음부터는 `.bat` 파일 더블클릭으로 실행할 수 있다.
+
+1. **API 키는 한 번만 영구 등록** (아무 cmd 창에서 한 번만 실행, 그 뒤로는 다시 안 해도 됨):
+   ```
+   setx GEMINI_API_KEY "본인의 Gemini API 키"
+   ```
+   실행 후 열려있던 cmd 창은 모두 닫는다 (새로 여는 창부터 적용됨).
+
+2. `local-workbook-prototype` 폴더 안의 세 `.bat` 파일을 그냥 더블클릭:
+   - `run_split.bat` — PDF 파일명/정답 페이지 번호를 물어보고 문제 분할+정답 파싱 실행 (1일차)
+   - `run_correct.bat` — 프로젝트 폴더 이름을 물어보고 1분 눈 검수 화면 실행
+   - `run_app.bat` — 태블릿 풀이 화면 실행 (매일 쓰는 건 이것)
+
 ## 1. 사용 순서 (0일차 -> 3일차)
 
 ### 0일차 (30분 이내) — 텍스트 레이어 확인 (가장 먼저 할 것)
