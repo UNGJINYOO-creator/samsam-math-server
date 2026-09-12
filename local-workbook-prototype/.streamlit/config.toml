@@ -1,0 +1,10 @@
+# 토스(Toss) 스타일 팔레트: 브랜드 블루 + 옅은 그레이 배경 + 짙은 회색 텍스트
+[theme]
+primaryColor = "#3182F6"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F2F4F6"
+textColor = "#191F28"
+font = "sans serif"
+
+[browser]
+gatherUsageStats = false

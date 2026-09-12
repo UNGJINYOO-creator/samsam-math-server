@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+
+# 실제 문제집 PDF/이미지/개인 학습 데이터는 커밋하지 않는다 (저작권 + 개인정보).
+*_project/
+*.pdf
+._ocr_tmp_page_*.png
