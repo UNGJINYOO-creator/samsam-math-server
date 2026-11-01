@@ -119,6 +119,10 @@ def save_boundaries(path: Path, boundaries: dict) -> None:
     path.write_text(json.dumps(boundaries, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+MAX_PARTS_PER_QUESTION = 4
+MAX_CROP_PIXELS = 50_000_000  # PIL 기본 안전 한도(약 1.78억)보다 넉넉히 낮게 잡음
+
+
 def export_question_crops(
     boundaries: dict,
     pages_dir: Path,
@@ -127,10 +131,18 @@ def export_question_crops(
 ) -> list[str]:
     """boundaries.json 내용을 바탕으로 pages/*.png에서 문제별 이미지를 잘라
     questions/q_XX.png 로 저장한다. 여러 파트로 나뉜 문제(페이지 넘어감)는
-    세로로 이어붙인다."""
+    세로로 이어붙인다.
+
+    실제 스캔본에서는 목차/서문 등에서 번호 패턴이 어긋나, 다음 문항 번호가
+    한참 뒤 페이지에서야 발견되는 경우가 있다. 이러면 "한 문항"이 수십~수백
+    페이지에 걸친 것으로 잘못 계산되어, 거대한 이미지를 만들다가 메모리를
+    과도하게 쓰거나 PIL의 디컴프레션 폭탄 방지 오류로 죽을 수 있다.
+    (경계가 자동으로 틀어진 것이므로) 그런 항목은 건너뛰고 경고만 남겨서,
+    사람이 correct_app.py의 "문제 경계 보정" 탭에서 직접 고치도록 한다."""
     out_dir.mkdir(parents=True, exist_ok=True)
     scale = dpi / 72.0
     saved: list[str] = []
+    skipped: list[str] = []
 
     def sort_key(qno: str):
         m = re.match(r"^\d+$", qno)
@@ -138,6 +150,14 @@ def export_question_crops(
 
     for qno in sorted(boundaries.keys(), key=sort_key):
         entry = boundaries[qno]
+
+        if len(entry["parts"]) > MAX_PARTS_PER_QUESTION:
+            skipped.append(
+                f"문항 {qno}: {len(entry['parts'])}개 페이지에 걸친 것으로 계산됨 "
+                "(자동 분할 오류로 보임, 건너뜀)"
+            )
+            continue
+
         crops = []
         for part in entry["parts"]:
             page_png = pages_dir / f"page_{part['page']:03d}.png"
@@ -155,6 +175,11 @@ def export_question_crops(
 
         total_h = sum(c.height for c in crops)
         max_w = max(c.width for c in crops)
+
+        if total_h * max_w > MAX_CROP_PIXELS:
+            skipped.append(f"문항 {qno}: 이미지 크기가 비정상적으로 큼 (자동 분할 오류로 보임, 건너뜀)")
+            continue
+
         combined = Image.new("RGB", (max_w, total_h), "white")
         y_cursor = 0
         for c in crops:
@@ -166,6 +191,9 @@ def export_question_crops(
         out_path = out_dir / out_name
         combined.save(out_path)
         saved.append(str(out_path))
+
+    for msg in skipped:
+        print(f"  [경고] {msg}")
 
     return saved
 

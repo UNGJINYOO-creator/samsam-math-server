@@ -164,7 +164,13 @@ def render_question_card(project_dir: Path, unit: str, qnos: list[str]):
     st.progress(idx / len(qnos), text=f"{idx + 1} / {len(qnos)} 문제")
     st.subheader(f"문제 {qno}")
     if img_path.exists():
-        st.image(str(img_path))
+        try:
+            st.image(str(img_path))
+        except Exception:
+            st.error(
+                "이 문제 이미지가 손상되었거나 비정상적으로 큽니다 (자동 분할이 잘못된 경우가 많습니다). "
+                "run_split.bat을 다시 실행하거나 run_correct.bat의 '문제 경계 보정' 탭에서 직접 고쳐주세요."
+            )
     else:
         st.warning(f"문제 이미지가 없습니다: {img_path}")
 

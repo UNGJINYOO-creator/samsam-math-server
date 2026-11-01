@@ -64,7 +64,10 @@ def render_answer_review_tab(project_dir: Path):
         with cols[0]:
             st.markdown(f"**#{qno}**")
             if crop_path and crop_path.exists():
-                st.image(str(crop_path), width=90)
+                try:
+                    st.image(str(crop_path), width=90)
+                except Exception:
+                    st.caption("(이미지 손상/크기 오류)")
 
         with cols[1]:
             new_answer = st.text_input("정답", value=entry.get("answer", ""), key=f"ans_{qno}", label_visibility="collapsed")
