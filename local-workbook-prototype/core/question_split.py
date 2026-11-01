@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import pymupdf as fitz
 from PIL import Image
@@ -128,6 +128,7 @@ def export_question_crops(
     pages_dir: Path,
     out_dir: Path,
     dpi: int = RENDER_DPI,
+    on_progress: Optional[Callable[[int, int], None]] = None,
 ) -> list[str]:
     """boundaries.json 내용을 바탕으로 pages/*.png에서 문제별 이미지를 잘라
     questions/q_XX.png 로 저장한다. 여러 파트로 나뉜 문제(페이지 넘어감)는
@@ -148,7 +149,10 @@ def export_question_crops(
         m = re.match(r"^\d+$", qno)
         return (0, int(qno)) if m else (1, qno)
 
-    for qno in sorted(boundaries.keys(), key=sort_key):
+    ordered = sorted(boundaries.keys(), key=sort_key)
+    for i, qno in enumerate(ordered, 1):
+        if on_progress:
+            on_progress(i, len(ordered))
         entry = boundaries[qno]
 
         if len(entry["parts"]) > MAX_PARTS_PER_QUESTION:

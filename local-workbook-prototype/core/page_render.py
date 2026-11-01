@@ -2,24 +2,39 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable, Optional
 
 import pymupdf as fitz
 
 from config import RENDER_DPI
 
 
-def render_pages(pdf_path: str, out_dir: Path, dpi: int = RENDER_DPI) -> list[Path]:
+def render_pages(
+    pdf_path: str,
+    out_dir: Path,
+    dpi: int = RENDER_DPI,
+    on_progress: Optional[Callable[[int, int], None]] = None,
+    skip_existing: bool = False,
+) -> list[Path]:
+    """skip_existing=True면 이미 만들어진 페이지 이미지는 다시 그리지 않는다
+    (중간에 끊겼다가 다시 열었을 때 처음부터 다시 하지 않도록)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     doc = fitz.open(pdf_path)
     zoom = dpi / 72.0
     matrix = fitz.Matrix(zoom, zoom)
+    total = len(doc)
 
     saved: list[Path] = []
     for i, page in enumerate(doc):
-        pix = page.get_pixmap(matrix=matrix)
         out_path = out_dir / f"page_{i + 1:03d}.png"
-        pix.save(str(out_path))
+        if not (skip_existing and out_path.exists()):
+            # 임시 파일에 다 쓴 뒤 이름을 바꿔서, 중간에 끊겨도 깨진 이미지가 "완성본"으로 남지 않게 함
+            tmp_path = out_dir / f"tmp_render_{i + 1:03d}.png"  # "page_*.png" 글롭에 안 걸리는 이름
+            page.get_pixmap(matrix=matrix).save(str(tmp_path))
+            tmp_path.replace(out_path)
         saved.append(out_path)
+        if on_progress:
+            on_progress(i + 1, total)
     doc.close()
     return saved
 

@@ -46,6 +46,9 @@ except ImportError:
 # ───────────────────────── 프로젝트 자동 준비 ─────────────────────────
 
 
+SPLIT_DONE_MARKER = ".split_done"
+
+
 def find_pdfs(root: Path) -> list[Path]:
     return sorted(root.glob("*.pdf"))
 
@@ -59,25 +62,42 @@ def ensure_project_ready(pdf_path: Path) -> Path:
     project_dir = project_dir_for_pdf(pdf_path)
     questions_dir = project_dir / QUESTIONS_DIRNAME
     boundaries_path = project_dir / BOUNDARIES_FILENAME
+    done_marker = project_dir / SPLIT_DONE_MARKER
 
-    if boundaries_path.exists() and any(questions_dir.glob("q_*.png")):
+    # 마커는 모든 단계가 끝까지 끝났을 때만 생기므로, 중간에 끊긴 프로젝트는 다시 이어서 처리된다
+    # (이미 만든 페이지 이미지는 skip_existing으로 건너뛰므로 처음부터 다시 하지는 않음)
+    if done_marker.exists():
         return project_dir
 
     project_dir.mkdir(parents=True, exist_ok=True)
     pages_dir = project_dir / PAGES_DIRNAME
 
-    with st.spinner("처음 여는 파일이라 문제를 나누고 있어요 (몇 초~몇십 초 정도 걸려요)..."):
-        render_pages(str(pdf_path), pages_dir)
-        text_results = check_text_layer(str(pdf_path))
-        image_only_pages = [r.page_no - 1 for r in text_results if not r.has_text_layer]
-        boundaries = build_all_boundaries(str(pdf_path), image_only_pages=image_only_pages)
-        save_boundaries(boundaries_path, boundaries)
-        export_question_crops(boundaries, pages_dir, questions_dir)
+    st.info("처음 여는 파일이라 문제를 나누고 있어요. 진행률이 올라가고 있으면 정상입니다 — 새로고침하지 말고 기다려주세요.")
+    bar = st.progress(0.0, text="준비 중...")
 
-        answers_path = project_dir / ANSWERS_FILENAME
-        if not answers_path.exists():
-            save_answers(answers_path, {})
+    # 전체 진행률 배분: 페이지 이미지 만들기 0~70%, 문제 위치 찾기 70~80%, 문제 자르기 80~100%
+    def on_render(done: int, total: int):
+        bar.progress(0.7 * done / total, text=f"1/3 페이지 이미지 만드는 중... ({done}/{total}쪽)")
 
+    def on_crop(done: int, total: int):
+        bar.progress(0.8 + 0.2 * done / total, text=f"3/3 문제 자르는 중... ({done}/{total}문항)")
+
+    render_pages(str(pdf_path), pages_dir, on_progress=on_render, skip_existing=True)
+
+    bar.progress(0.7, text="2/3 문제 위치 찾는 중...")
+    text_results = check_text_layer(str(pdf_path))
+    image_only_pages = [r.page_no - 1 for r in text_results if not r.has_text_layer]
+    boundaries = build_all_boundaries(str(pdf_path), image_only_pages=image_only_pages)
+    save_boundaries(boundaries_path, boundaries)
+
+    export_question_crops(boundaries, pages_dir, questions_dir, on_progress=on_crop)
+
+    answers_path = project_dir / ANSWERS_FILENAME
+    if not answers_path.exists():
+        save_answers(answers_path, {})
+
+    done_marker.touch()
+    bar.progress(1.0, text="완료!")
     return project_dir
 
 
