@@ -50,7 +50,10 @@ def _extract_page_text(pdf_path: str, page_no: int, use_ocr: bool = False) -> st
     """page_no는 1-based. use_ocr=True면 텍스트 레이어 대신 OCR 결과를 사용한다."""
     if not use_ocr:
         doc = fitz.open(pdf_path)
-        text = doc[page_no - 1].get_text()
+        # sort=True: PDF 안에 그려진 순서가 아니라 y->x 좌표 순으로 재정렬해서 읽는다.
+        # 다단(여러 칸) 정답표에서 칸 순서가 뒤섞이는 문제를 줄여준다 (완벽하지는 않음 -
+        # 진짜 여러 컬럼이 같은 가로줄에 나란히 있으면 여전히 섞일 수 있다).
+        text = doc[page_no - 1].get_text(sort=True)
         doc.close()
         return text
 

@@ -78,6 +78,23 @@ streamlit run correct_app.py -- --project ./math_grade1_project
   클릭해서 나온 y좌표를 표에 입력하는 방식으로 보정("클릭 2번"으로 시작/끝 지정).
   `streamlit-image-coordinates`가 설치되어 있으면 클릭 즉시 좌표가 표시된다.
 
+#### 정답표가 다단(여러 칸) + 괄호 설명이 섞여서 자동 파싱이 많이 틀렸다면
+
+이런 레이아웃은 가벼운 규칙 기반 파서로는 한계가 있다. UI에서 칸칸이 고치는 것보다
+메모장에 정답을 쭉 타이핑해서 한 번에 다시 만드는 게 훨씬 빠르다:
+
+1. 프로젝트 폴더 안에 텍스트 파일(예: `answers_manual.txt`)을 만들고, 책을 보면서
+   한 줄에 한 문항씩 입력한다:
+   ```
+   1. 0.25, 유한소수
+   2. 0.125, 유한소수
+   3. 0.727272..., 무한소수
+   ```
+2. `run_answers_from_text.bat` 더블클릭 (또는
+   `python scripts/answers_from_text.py --project ./프로젝트 --text ./answers_manual.txt`)
+
+기존에 "정답 검수" 탭에서 손봐둔 유형/도형여부/해설은 그대로 유지된다.
+
 ### 2~3일차 — 태블릿 풀이
 
 ```bash
