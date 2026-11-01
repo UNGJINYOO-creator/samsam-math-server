@@ -16,27 +16,31 @@ import json
 import re
 from pathlib import Path
 
-from subjects.math.gemini_client import GeminiError, get_gemini_model
+from subjects.math.gemini_client import GeminiError, generate
 
 AISolveError = GeminiError
 
-SOLVE_PROMPT = """이 이미지는 중학교 수학 문제집의 문제 1개야. 이 문제를 직접 풀어서
-정답을 구해줘.
-
-반드시 아래 JSON 형식으로만 답해줘 (다른 설명 문구 없이 JSON 하나만):
-{
+ITEM_SCHEMA = """{
   "answer": "정답. 객관식이면 원문자(①~⑤) 중 하나, 단답형이면 값만 간결하게(예: x=4, 15cm, 1/2), 풀이과정을 써야 하는 서술형이면 \"해설참조\"",
   "type": "multiple_choice 또는 short_answer 또는 essay 중 하나",
   "choices": ["객관식이면 보기 내용을 순서대로(원문자 빼고), 객관식이 아니면 빈 배열 []"],
   "hint": "정답은 절대 말하지 말고, 어떤 식이나 개념을 쓰면 되는지 1문장 힌트",
   "explanation": "1~3문장으로 간단한 풀이 과정",
   "steps": ["풀이를 식 위주로 3~6줄. 학생이 직접 채워볼 핵심 값 2~3곳을 [[ ]]로 감싸줘. 예: \"2x = [[8]]\", \"x = [[4]]\""]
-}
-steps의 [[ ]] 안에는 짧은 값(숫자, 식, 단어)만 넣고, 첫 줄(문제의 식을 옮겨 적는 줄)에는 빈칸을 넣지 마.
+}"""
+
+RULES = """steps의 [[ ]] 안에는 짧은 값(숫자, 식, 단어)만 넣고, 첫 줄(문제의 식을 옮겨 적는 줄)에는 빈칸을 넣지 마.
 
 중요: LaTeX(\\frac, \\times, $ 등)를 절대 쓰지 마. 학생이 키보드로 입력하는 것처럼
 일반 글자로만 써줘. 예: 분수는 1/2, 거듭제곱은 x^2, 곱하기는 ×, 루트는 √2, 원주율은 π.
 """
+
+# 무료 요금제는 "요청 횟수"로 하루 한도가 정해지므로, 한 페이지의 문제들을 이미지 여러 장으로
+# 한 번에 보내 요청 1번으로 푼다 (문제마다 1번씩 부르면 하루 20문제 정도에서 한도가 찬다).
+BATCH_PROMPT = """아래 이미지 {n}장은 중학교 수학 문제집의 문제를 1개씩 잘라낸 거야 (1번째 이미지 = 1번째 문제).
+각 문제를 직접 풀어서, 이미지 순서 그대로 {n}개짜리 JSON 배열 하나로만 답해줘 (다른 설명 문구 없이).
+배열의 각 원소 형식:
+""" + ITEM_SCHEMA + "\n" + RULES
 
 _JSON_FENCE_PATTERN = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
 
@@ -75,9 +79,7 @@ def _plain_math(text: str) -> str:
     return text.replace("{", "").replace("}", "").strip()
 
 
-def _parse_json_response(raw_text: str) -> dict:
-    cleaned = _JSON_FENCE_PATTERN.sub("", raw_text.strip()).strip()
-    data = _loads_lenient(cleaned)  # 그래도 안 되면 JSONDecodeError를 올려서 호출부가 처리
+def _normalize_item(data: dict) -> dict:
     return {
         "answer": _plain_math(str(data.get("answer", ""))),
         "type": data.get("type") if data.get("type") in ("multiple_choice", "short_answer", "essay") else "short_answer",
@@ -88,15 +90,34 @@ def _parse_json_response(raw_text: str) -> dict:
     }
 
 
-def solve_question(image_path: Path) -> dict:
-    """image_path: 문제 크롭 이미지(q_XX.png) 경로.
+def _parse_json_response(raw_text: str) -> dict:
+    """문제 1개짜리 응답 (객체 하나, 또는 원소 1개짜리 배열)."""
+    return _parse_batch_response(raw_text, 1)[0]
 
-    반환: {"answer", "type", "choices", "hint", "explanation", "steps"}
+
+def _parse_batch_response(raw_text: str, n: int) -> list[dict]:
+    cleaned = _JSON_FENCE_PATTERN.sub("", raw_text.strip()).strip()
+    data = _loads_lenient(cleaned)  # 그래도 안 되면 JSONDecodeError를 올려서 호출부가 처리
+    if isinstance(data, dict):
+        data = [data]
+    if not isinstance(data, list) or len(data) != n:
+        raise AISolveError(f"AI가 문제 {n}개에 대한 답을 제대로 돌려주지 않았어요 (받은 개수: {len(data) if isinstance(data, list) else 0})")
+    return [_normalize_item(item if isinstance(item, dict) else {}) for item in data]
+
+
+def solve_questions(image_paths: list[Path]) -> list[dict]:
+    """여러 문제를 AI 요청 1번으로 푼다. 반환 순서 = image_paths 순서.
+
+    각 원소: {"answer", "type", "choices", "hint", "explanation", "steps"}
     steps는 빈칸 채우기용 풀이 줄 목록이고, 빈칸 자리는 [[값]]으로 표시되어 있다.
     """
     from PIL import Image
 
-    model = get_gemini_model()
-    image = Image.open(image_path)
-    response = model.generate_content([SOLVE_PROMPT, image])
-    return _parse_json_response(response.text)
+    images = [Image.open(p) for p in image_paths]
+    response = generate([BATCH_PROMPT.replace("{n}", str(len(images))), *images])
+    return _parse_batch_response(response.text, len(images))
+
+
+def solve_question(image_path: Path) -> dict:
+    """문제 1개 풀기 (solve_questions의 1개짜리 버전)."""
+    return solve_questions([image_path])[0]

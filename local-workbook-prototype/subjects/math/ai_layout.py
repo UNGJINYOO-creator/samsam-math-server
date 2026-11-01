@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 
 from core.page_questions import PageQuestion
-from subjects.math.gemini_client import GeminiError, get_gemini_model
+from subjects.math.gemini_client import GeminiError, generate
 
 AILayoutError = GeminiError
 
@@ -58,6 +58,5 @@ def parse_layout_response(raw_text: str, page_width_pt: float, page_height_pt: f
 def detect_questions_by_ai(page_png: Path, page_width_pt: float, page_height_pt: float) -> list[PageQuestion]:
     from PIL import Image
 
-    model = get_gemini_model()
-    response = model.generate_content([LAYOUT_PROMPT, Image.open(page_png)])
+    response = generate([LAYOUT_PROMPT, Image.open(page_png)])
     return parse_layout_response(response.text, page_width_pt, page_height_pt)

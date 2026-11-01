@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from subjects.math.gemini_client import GeminiError, get_gemini_model
+from subjects.math.gemini_client import GeminiError, generate
 
 HintExplainError = GeminiError
 
@@ -28,20 +28,18 @@ EXPLANATION_PROMPT_TEMPLATE = """중1~중2 수준의 수학 문제야. 정답은
 def generate_hint(image_path: Path) -> str:
     from PIL import Image
 
-    model = get_gemini_model()
     image = Image.open(image_path)
-    response = model.generate_content([HINT_PROMPT, image])
+    response = generate([HINT_PROMPT, image])
     return response.text.strip()
 
 
 def generate_explanation(image_path: Path, wrong_answer: str, correct_answer: str) -> str:
     from PIL import Image
 
-    model = get_gemini_model()
     image = Image.open(image_path)
     prompt = EXPLANATION_PROMPT_TEMPLATE.format(
         correct=correct_answer or "(정답 미상)",
         wrong=wrong_answer or "(무응답)",
     )
-    response = model.generate_content([prompt, image])
+    response = generate([prompt, image])
     return response.text.strip()

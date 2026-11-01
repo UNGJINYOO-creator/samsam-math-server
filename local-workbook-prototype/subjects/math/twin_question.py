@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from subjects.math.gemini_client import GeminiError, get_gemini_model
+from subjects.math.gemini_client import GeminiError, generate
 
 TwinQuestionError = GeminiError
 
@@ -55,7 +55,6 @@ def generate_twin_question(image_path: Path) -> dict:
     """
     from PIL import Image
 
-    model = get_gemini_model()
     image = Image.open(image_path)
-    response = model.generate_content([PROMPT_TEMPLATE, image])
+    response = generate([PROMPT_TEMPLATE, image])
     return _parse_response(response.text)
