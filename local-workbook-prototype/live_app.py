@@ -324,23 +324,48 @@ def render_question(pdf_path: Path, project_dir: Path, total_pages: int):
     render_answer_flow(project_dir, unit, log_path, key, img_path, page, idx)
 
 
+CHOICE_MARKS = ["①", "②", "③", "④", "⑤"]
+
+
+def answer_input(question_type: str, key_suffix: str, retry: bool = False) -> str | None:
+    """객관식이면 ①~⑤ 버튼(누르는 즉시 제출), 그 외는 입력창 + 제출 버튼.
+    제출된 값을 돌려주고, 아직 제출 안 했으면 None."""
+    if question_type == "multiple_choice":
+        st.caption("다시 골라보세요" if retry else "정답을 골라주세요")
+        cols = st.columns(len(CHOICE_MARKS))
+        for i, mark in enumerate(CHOICE_MARKS):
+            if cols[i].button(mark, key=f"mc_{key_suffix}_{i}", use_container_width=True):
+                return str(i + 1)
+        return None
+
+    value = st.text_input("다시 답 입력" if retry else "최종 답을 입력하세요", key=f"txt_{key_suffix}")
+    if st.button("제출 (2차)" if retry else "제출", key=f"btn_{key_suffix}", type="primary") and value:
+        return value
+    return None
+
+
 def render_answer_flow(project_dir: Path, unit: str, log_path: Path, key: str, img_path: Path, page: int, idx: int):
     stage = st.session_state.stage
 
     # ── 1차 시도 ──
     if stage == "answering":
-        submitted = st.text_input("최종 답을 입력하세요", key=f"ans_{key}")
-        if st.button("제출", key=f"submit_{key}", type="primary") and submitted:
-            try:
-                with st.spinner("채점 중..."):
+        # 객관식인지 알아야 ①~⑤ 버튼을 보여줄 수 있어서, 문제를 띄우자마자 AI가 먼저 읽는다.
+        # (정답은 화면에 안 나오고, AI 호출은 여전히 문제당 1번 - 제출 때 하던 걸 앞당긴 것뿐)
+        try:
+            if key in load_answers(project_dir / ANSWERS_FILENAME):
+                entry = ensure_answer(project_dir, key, img_path)
+            else:
+                with st.spinner("문제 읽는 중..."):
                     entry = ensure_answer(project_dir, key, img_path)
-            except AISolveError as e:
-                st.error(str(e))
-                return
-            except Exception as e:
-                st.error(f"채점 중 오류가 발생했어요: {e}")
-                return
+        except AISolveError as e:
+            st.error(str(e))
+            return
+        except Exception as e:
+            st.error(f"문제를 읽는 중 오류가 발생했어요: {e}")
+            return
 
+        submitted = answer_input(entry["type"], f"1_{key}")
+        if submitted:
             if entry["type"] == "essay":
                 st.session_state.pending_essay_answer = submitted
                 st.session_state.essay_explanation = entry.get("explanation", "")
@@ -387,8 +412,8 @@ def render_answer_flow(project_dir: Path, unit: str, log_path: Path, key: str, i
                     st.session_state.hint_text = f"(힌트를 불러오는 중 오류가 발생했어요: {e})"
         st.info(f"💡 **힌트**\n\n{st.session_state.hint_text}")
 
-        submitted2 = st.text_input("다시 답 입력", key=f"ans2_{key}")
-        if st.button("제출 (2차)", key=f"submit2_{key}", type="primary") and submitted2:
+        submitted2 = answer_input(entry["type"], f"2_{key}", retry=True)
+        if submitted2:
             ok = grade_answer(entry["type"], entry["answer"], submitted2)
             append_log(log_path, unit, key, entry["type"], submitted2, ok, is_retry=True)
             if ok:
