@@ -27,8 +27,12 @@ SOLVE_PROMPT = """이 이미지는 중학교 수학 문제집의 문제 1개야.
 {
   "answer": "정답. 객관식이면 원문자(①~⑤) 중 하나, 단답형이면 값만 간결하게(예: x=4, 15cm, 1/2), 풀이과정을 써야 하는 서술형이면 \"해설참조\"",
   "type": "multiple_choice 또는 short_answer 또는 essay 중 하나",
-  "explanation": "1~3문장으로 간단한 풀이 과정"
+  "choices": ["객관식이면 보기 내용을 순서대로(원문자 빼고), 객관식이 아니면 빈 배열 []"],
+  "hint": "정답은 절대 말하지 말고, 어떤 식이나 개념을 쓰면 되는지 1문장 힌트",
+  "explanation": "1~3문장으로 간단한 풀이 과정",
+  "steps": ["풀이를 식 위주로 3~6줄. 학생이 직접 채워볼 핵심 값 2~3곳을 [[ ]]로 감싸줘. 예: \"2x = [[8]]\", \"x = [[4]]\""]
 }
+steps의 [[ ]] 안에는 짧은 값(숫자, 식, 단어)만 넣고, 첫 줄(문제의 식을 옮겨 적는 줄)에는 빈칸을 넣지 마.
 
 중요: LaTeX(\\frac, \\times, $ 등)를 절대 쓰지 마. 학생이 키보드로 입력하는 것처럼
 일반 글자로만 써줘. 예: 분수는 1/2, 거듭제곱은 x^2, 곱하기는 ×, 루트는 √2, 원주율은 π.
@@ -77,14 +81,18 @@ def _parse_json_response(raw_text: str) -> dict:
     return {
         "answer": _plain_math(str(data.get("answer", ""))),
         "type": data.get("type") if data.get("type") in ("multiple_choice", "short_answer", "essay") else "short_answer",
+        "choices": [_plain_math(str(c)) for c in data.get("choices") or [] if str(c).strip()],
+        "hint": _plain_math(str(data.get("hint", ""))),
         "explanation": _plain_math(str(data.get("explanation", ""))),
+        "steps": [_plain_math(str(s)) for s in data.get("steps") or [] if str(s).strip()],
     }
 
 
 def solve_question(image_path: Path) -> dict:
     """image_path: 문제 크롭 이미지(q_XX.png) 경로.
 
-    반환: {"answer": str, "type": str, "explanation": str}
+    반환: {"answer", "type", "choices", "hint", "explanation", "steps"}
+    steps는 빈칸 채우기용 풀이 줄 목록이고, 빈칸 자리는 [[값]]으로 표시되어 있다.
     """
     from PIL import Image
 

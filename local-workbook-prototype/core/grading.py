@@ -86,10 +86,17 @@ def grade_short_answer(correct: str, submitted: str) -> bool:
 
     # 단위 생략 허용: "65도"(정답) vs "65"(제출) 처럼 숫자/기호 값은 같고
     # 단위만 빠진 경우도 정답으로 인정한다. 값 자체가 다르면(예: "9π" vs "9") 여기서도 불일치.
-    if _strip_unit_suffix(norm_correct) == _strip_unit_suffix(norm_submitted):
+    # 변수 표기 생략도 허용: 정답이 "4"인데 "x=4"로 쓴 경우(또는 반대)도 같은 답으로 본다.
+    if _strip_unit_suffix(_drop_single_var(norm_correct)) == _strip_unit_suffix(_drop_single_var(norm_submitted)):
         return True
 
     return False
+
+
+def _drop_single_var(normalized: str) -> str:
+    """"x=4" 처럼 변수 하나=값 하나면 값만 남긴다. 여러 개("x=4,y=2")는 그대로."""
+    m = VAR_VALUE_PATTERN.match(normalized)
+    return m.group(2) if m else normalized
 
 
 def grade_multiple_choice(correct: str, submitted: str) -> bool:
