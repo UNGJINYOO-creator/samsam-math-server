@@ -15,17 +15,21 @@ def render_pages(
     dpi: int = RENDER_DPI,
     on_progress: Optional[Callable[[int, int], None]] = None,
     skip_existing: bool = False,
+    start_page: int = 1,
 ) -> list[Path]:
     """skip_existing=True면 이미 만들어진 페이지 이미지는 다시 그리지 않는다
-    (중간에 끊겼다가 다시 열었을 때 처음부터 다시 하지 않도록)."""
+    (중간에 끊겼다가 다시 열었을 때 처음부터 다시 하지 않도록).
+    start_page(1-based) 앞 페이지는 그리지 않는다. 파일 이름은 원래 페이지 번호를 유지한다."""
     out_dir.mkdir(parents=True, exist_ok=True)
     doc = fitz.open(pdf_path)
     zoom = dpi / 72.0
     matrix = fitz.Matrix(zoom, zoom)
-    total = len(doc)
+    first = max(0, start_page - 1)
+    total = len(doc) - first
 
     saved: list[Path] = []
-    for i, page in enumerate(doc):
+    for i in range(first, len(doc)):
+        page = doc[i]
         out_path = out_dir / f"page_{i + 1:03d}.png"
         if not (skip_existing and out_path.exists()):
             # 임시 파일에 다 쓴 뒤 이름을 바꿔서, 중간에 끊겨도 깨진 이미지가 "완성본"으로 남지 않게 함
@@ -34,7 +38,7 @@ def render_pages(
             tmp_path.replace(out_path)
         saved.append(out_path)
         if on_progress:
-            on_progress(i + 1, total)
+            on_progress(i - first + 1, total)
     doc.close()
     return saved
 

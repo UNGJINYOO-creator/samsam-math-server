@@ -52,17 +52,22 @@ def _line_starts(page: fitz.Page) -> list[tuple[int, float, str]]:
     return candidates
 
 
-def rule_based_split(pdf_path: str, max_question_no: int = 200) -> dict:
+def rule_based_split(pdf_path: str, max_question_no: int = 200, start_page: int = 1) -> dict:
     """텍스트 레이어를 이용해 문항 시작점을 탐지하고 경계(boundaries)를 구성한다.
 
     "이전에 발견한 번호 + 1"과 일치하는 경우만 채택하여 본문 속 우연한 숫자
     (예: "3cm", "2배") 오탐을 크게 줄인다. 첫 문항은 1로 시작한다고 가정한다.
+
+    start_page(1-based)보다 앞 페이지는 건너뛴다. 표지/목차/개념 설명 페이지의
+    "1. 2. 3." 같은 번호가 문제로 잡혀서 진짜 문제 번호 순서가 밀리는 걸 막는다.
     """
     doc = fitz.open(pdf_path)
     expected = 1
     starts: list[tuple[int, int, float]] = []  # (question_no, page_no(0-based), y0)
 
     for page_index, page in enumerate(doc):
+        if page_index < start_page - 1:
+            continue
         for no, y0, _text in _line_starts(page):
             if no == expected and expected <= max_question_no:
                 starts.append((no, page_index, y0))
@@ -202,10 +207,13 @@ def export_question_crops(
     return saved
 
 
-def build_all_boundaries(pdf_path: str, image_only_pages: Optional[list[int]] = None) -> dict:
+def build_all_boundaries(
+    pdf_path: str, image_only_pages: Optional[list[int]] = None, start_page: int = 1
+) -> dict:
     """텍스트 레이어 있는 부분은 규칙 기반, 이미지 전용 페이지는 미확정 fallback으로
-    합쳐서 최종 boundaries dict를 만든다."""
-    boundaries = rule_based_split(pdf_path)
+    합쳐서 최종 boundaries dict를 만든다. start_page(1-based) 앞 페이지는 무시한다."""
+    boundaries = rule_based_split(pdf_path, start_page=start_page)
     if image_only_pages:
-        boundaries.update(fallback_whole_page_split(pdf_path, image_only_pages))
+        in_range = [p for p in image_only_pages if p >= start_page - 1]
+        boundaries.update(fallback_whole_page_split(pdf_path, in_range))
     return boundaries

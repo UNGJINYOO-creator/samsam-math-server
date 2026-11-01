@@ -52,6 +52,12 @@ def main() -> None:
         help="정답표 페이지에 텍스트 레이어가 없을 때(순수 이미지) 지정",
     )
     parser.add_argument(
+        "--start-page",
+        type=int,
+        default=1,
+        help="실제 문제가 시작하는 PDF 페이지(1-based). 앞쪽 표지/목차/개념 설명 페이지의 번호를 문제로 잘못 잡지 않게 한다",
+    )
+    parser.add_argument(
         "--explanation-pages",
         default=None,
         help="(선택) 문항별 풀이 과정 전체가 있는 '정답과 해설' 페이지 번호, 콤마로 구분",
@@ -64,7 +70,7 @@ def main() -> None:
     questions_dir = project_dir / QUESTIONS_DIRNAME
 
     print("1/4 페이지 이미지 렌더링 중...")
-    render_pages(args.pdf, pages_dir)
+    render_pages(args.pdf, pages_dir, start_page=args.start_page)
 
     print("2/4 텍스트 레이어 확인 중...")
     text_results = check_text_layer(args.pdf)
@@ -76,7 +82,7 @@ def main() -> None:
         )
 
     print("3/4 문제 경계 자동 분할 중...")
-    boundaries = build_all_boundaries(args.pdf, image_only_pages=image_only_pages)
+    boundaries = build_all_boundaries(args.pdf, image_only_pages=image_only_pages, start_page=args.start_page)
     boundaries_path = project_dir / BOUNDARIES_FILENAME
     save_boundaries(boundaries_path, boundaries)
     saved = export_question_crops(boundaries, pages_dir, questions_dir)
