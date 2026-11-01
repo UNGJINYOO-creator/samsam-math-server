@@ -54,19 +54,57 @@ def _is_quota_error(e: Exception) -> bool:
     return type(e).__name__ == "ResourceExhausted" or "429" in str(e)[:20] or "exceeded your current quota" in str(e)
 
 
-def generate(contents: list):
-    """모든 Gemini 호출은 이 함수를 거친다. 한도 오류는 QuotaExceededError로 바꿔 올린다."""
+class AIResponse:
+    def __init__(self, text: str, provider: str):
+        self.text = text
+        self.provider = provider  # "gemini" | "nvidia"
+
+
+def _image_count(contents: list) -> int:
+    return sum(1 for c in contents if not isinstance(c, str))
+
+
+def use_nvidia_now() -> bool:
+    """지금 Gemini 대신 NVIDIA(보조 AI)를 써야 하는 상황인지:
+    NVIDIA 키가 있고, (Gemini가 한도에 걸렸거나 / Gemini 키가 없거나 / AI_PROVIDER=nvidia로 고정)."""
+    from subjects.math.nvidia_client import nvidia_available
+
+    if not nvidia_available():
+        return False
+    return (
+        os.environ.get("AI_PROVIDER", "").lower() == "nvidia"
+        or quota_blocked_seconds() > 0
+        or not os.environ.get("GEMINI_API_KEY")
+    )
+
+
+def generate(contents: list, provider: str | None = None) -> AIResponse:
+    """모든 AI 호출은 이 함수를 거친다.
+
+    평소엔 Gemini. Gemini가 한도에 걸리면 NVIDIA 키가 있을 때 NVIDIA로 자동 전환한다.
+    NVIDIA는 요청 1번에 이미지 1장만 보내도록 쓴다(여러 장을 못 받는 모델이 많아서).
+    여러 장짜리 요청은 전환하지 않고 QuotaExceededError를 올리며, 부르는 쪽(ai_solver)이
+    한 장씩 나눠서 다시 부른다. provider="gemini"/"nvidia"로 강제할 수도 있다(비교 스크립트용).
+    """
     global _blocked_until
+    from subjects.math import nvidia_client
+
+    if provider == "nvidia" or (provider is None and use_nvidia_now() and _image_count(contents) <= 1):
+        resp = nvidia_client.generate(contents)
+        return AIResponse(resp.text, "nvidia")
+
     blocked = quota_blocked_seconds()
     if blocked > 0:
         raise QuotaExceededError(blocked)
     model = get_gemini_model()
     try:
-        return model.generate_content(contents)
+        return AIResponse(model.generate_content(contents).text, "gemini")
     except Exception as e:
         if _is_quota_error(e):
             secs = _retry_seconds(str(e))
             _blocked_until = time.time() + (secs if secs else 60)
+            if provider is None and nvidia_client.nvidia_available() and _image_count(contents) <= 1:
+                return AIResponse(nvidia_client.generate(contents).text, "nvidia")
             raise QuotaExceededError(secs) from e
         raise
 

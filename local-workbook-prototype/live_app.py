@@ -33,6 +33,7 @@ from core.page_questions import render_page
 from core.session_log import append_log, unit_review_summary
 from live_engine import answer_key, cached_page, ensure_answer, get_answer, page_png_path, prefetch_around, prepare_page
 from subjects.math.gemini_client import QuotaExceededError, quota_blocked_seconds
+from subjects.math.nvidia_client import nvidia_available
 from ui_theme import inject_toss_style
 
 try:
@@ -380,6 +381,8 @@ def render_left(pdf_path: Path, project_dir: Path, total_pages: int, page: int, 
         feedback("right", "정답이에요!")
     elif stage == "revealed":
         feedback("reveal", f"정답은 {answer_text(entry)} 예요", entry.get("explanation") or "")
+    if stage != "try1" and (entry or {}).get("solver") == "nvidia":
+        st.caption("보조 AI(NVIDIA)가 낸 정답으로 채점했어요. 채점이 이상하면 책 뒤 정답을 확인해주세요.")
 
     # ── 답 고르기/입력 ──
     answer_value = None
@@ -508,7 +511,11 @@ def main():
 
     blocked = quota_blocked_seconds()
     if blocked > 0:
-        st.caption(f"AI 사용량 한도 · 약 {int(blocked // 60) + 1}분 뒤 다시 사용 가능 · 그동안은 책 뒤 정답으로 직접 채점")
+        later = f"약 {int(blocked // 60) + 1}분 뒤 Gemini 다시 사용 가능"
+        if nvidia_available():
+            st.caption(f"Gemini 사용량 한도 · {later} · 그동안은 보조 AI(NVIDIA)로 채점")
+        else:
+            st.caption(f"AI 사용량 한도 · {later} · 그동안은 책 뒤 정답으로 직접 채점")
 
     pdf_path = PDF_DIR / st.session_state.pdf_name
     if not st.session_state.started:

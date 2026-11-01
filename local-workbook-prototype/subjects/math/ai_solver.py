@@ -16,7 +16,8 @@ import json
 import re
 from pathlib import Path
 
-from subjects.math.gemini_client import GeminiError, generate
+from subjects.math.gemini_client import GeminiError, QuotaExceededError, generate, use_nvidia_now
+from subjects.math.nvidia_client import nvidia_available
 
 AISolveError = GeminiError
 
@@ -105,17 +106,37 @@ def _parse_batch_response(raw_text: str, n: int) -> list[dict]:
     return [_normalize_item(item if isinstance(item, dict) else {}) for item in data]
 
 
-def solve_questions(image_paths: list[Path]) -> list[dict]:
-    """여러 문제를 AI 요청 1번으로 푼다. 반환 순서 = image_paths 순서.
+def _solve_batch(images: list, provider: str | None) -> list[dict]:
+    response = generate([BATCH_PROMPT.replace("{n}", str(len(images))), *images], provider=provider)
+    return [{**item, "solver": response.provider} for item in _parse_batch_response(response.text, len(images))]
 
-    각 원소: {"answer", "type", "choices", "hint", "explanation", "steps"}
+
+def _solve_one_by_one(images: list, provider: str | None) -> list[dict]:
+    return [_solve_batch([img], provider)[0] for img in images]
+
+
+def solve_questions(image_paths: list[Path], provider: str | None = None) -> list[dict]:
+    """여러 문제를 푼다. 반환 순서 = image_paths 순서.
+
+    Gemini는 요청 1번에 여러 문제를 같이 보낸다(무료 한도가 요청 횟수 기준이라).
+    보조 AI(NVIDIA)를 써야 할 때는 이미지를 한 장씩 보낸다(여러 장을 못 받는 모델이 많아서).
+
+    각 원소: {"answer", "type", "choices", "hint", "explanation", "steps", "solver"}
     steps는 빈칸 채우기용 풀이 줄 목록이고, 빈칸 자리는 [[값]]으로 표시되어 있다.
+    solver는 답을 낸 AI ("gemini" | "nvidia").
     """
     from PIL import Image
 
     images = [Image.open(p) for p in image_paths]
-    response = generate([BATCH_PROMPT.replace("{n}", str(len(images))), *images])
-    return _parse_batch_response(response.text, len(images))
+    if provider == "nvidia" or (provider is None and len(images) > 1 and use_nvidia_now()):
+        return _solve_one_by_one(images, provider)
+    try:
+        return _solve_batch(images, provider)
+    except QuotaExceededError:
+        # Gemini가 방금 한도에 걸림 -> NVIDIA 키가 있으면 한 장씩 보조 AI로
+        if provider is None and len(images) > 1 and nvidia_available():
+            return _solve_one_by_one(images, provider)
+        raise
 
 
 def solve_question(image_path: Path) -> dict:
