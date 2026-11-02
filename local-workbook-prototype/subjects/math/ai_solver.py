@@ -22,7 +22,7 @@ from subjects.math.nvidia_client import nvidia_available
 AISolveError = GeminiError
 
 ITEM_SCHEMA = """{
-  "answer": "정답. 객관식이면 원문자(①~⑤) 중 하나, 단답형이면 값만 간결하게(예: x=4, 15cm, 1/2), 풀이과정을 써야 하는 서술형이면 \"해설참조\"",
+  "answer": "정답. 객관식이면 원문자(①~⑤) 중 하나(\"정답 2개\"·\"모두 고르면\"처럼 여러 개면 \"②, ⑤\"처럼 쉼표로 모두), 단답형이면 값만 간결하게(예: x=4, 15cm, 1/2), 풀이과정을 써야 하는 서술형이면 \"해설참조\"",
   "type": "multiple_choice 또는 short_answer 또는 essay 중 하나",
   "choices": ["객관식이면 보기 내용을 순서대로(원문자 빼고), 객관식이 아니면 빈 배열 []"],
   "hint": "정답은 절대 말하지 말고, 어떤 식이나 개념을 쓰면 되는지 1문장 힌트",
@@ -42,6 +42,13 @@ BATCH_PROMPT = """아래 이미지 {n}장은 중학교 수학 문제집의 문�
 각 문제를 직접 풀어서, 이미지 순서 그대로 {n}개짜리 JSON 배열 하나로만 답해줘 (다른 설명 문구 없이).
 배열의 각 원소 형식:
 """ + ITEM_SCHEMA + "\n" + RULES
+
+# PDF 글자(OCR)는 한글 문장은 정확하지만 수식은 깨져 있을 수 있어서, 참고용으로만 같이 보낸다.
+OCR_NOTE = """
+아래는 각 문제 영역에서 PDF가 가지고 있던 글자(OCR)야. 한글 문장과 "(정답 2개)" 같은 조건을 읽는 데 참고해.
+단, 수식은 깨져 있을 수 있어: 분수는 분자와 분모가 다른 줄로 쪼개지고, 거듭제곱(2², 5³)은 보통 숫자(22, 53)처럼
+붙어 있고, 순환소수 위의 점은 사라져 있어. 그러니 숫자·수식·점의 위치는 반드시 이미지를 보고 판단해줘.
+"""
 
 _JSON_FENCE_PATTERN = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
 
@@ -106,16 +113,27 @@ def _parse_batch_response(raw_text: str, n: int) -> list[dict]:
     return [_normalize_item(item if isinstance(item, dict) else {}) for item in data]
 
 
-def _solve_batch(images: list, provider: str | None) -> list[dict]:
-    response = generate([BATCH_PROMPT.replace("{n}", str(len(images))), *images], provider=provider)
+def _prompt(n: int, texts: list[str] | None) -> str:
+    prompt = BATCH_PROMPT.replace("{n}", str(n))
+    if texts and any(t.strip() for t in texts):
+        prompt += OCR_NOTE + "\n".join(
+            f"[{i}번째 문제 글자]\n{t.strip() or '(글자 없음)'}" for i, t in enumerate(texts, 1)
+        )
+    return prompt
+
+
+def _solve_batch(images: list, provider: str | None, texts: list[str] | None = None) -> list[dict]:
+    response = generate([_prompt(len(images), texts), *images], provider=provider)
     return [{**item, "solver": response.provider} for item in _parse_batch_response(response.text, len(images))]
 
 
-def _solve_one_by_one(images: list, provider: str | None) -> list[dict]:
-    return [_solve_batch([img], provider)[0] for img in images]
+def _solve_one_by_one(images: list, provider: str | None, texts: list[str] | None = None) -> list[dict]:
+    return [
+        _solve_batch([img], provider, [texts[i]] if texts else None)[0] for i, img in enumerate(images)
+    ]
 
 
-def solve_questions(image_paths: list[Path], provider: str | None = None) -> list[dict]:
+def solve_questions(image_paths: list[Path], provider: str | None = None, texts: list[str] | None = None) -> list[dict]:
     """여러 문제를 푼다. 반환 순서 = image_paths 순서.
 
     Gemini는 요청 1번에 여러 문제를 같이 보낸다(무료 한도가 요청 횟수 기준이라).
@@ -124,18 +142,19 @@ def solve_questions(image_paths: list[Path], provider: str | None = None) -> lis
     각 원소: {"answer", "type", "choices", "hint", "explanation", "steps", "solver"}
     steps는 빈칸 채우기용 풀이 줄 목록이고, 빈칸 자리는 [[값]]으로 표시되어 있다.
     solver는 답을 낸 AI ("gemini" | "nvidia").
+    texts를 주면(문제별 PDF 글자) 한글 문장·조건을 정확히 읽도록 이미지와 같이 보낸다.
     """
     from PIL import Image
 
     images = [Image.open(p) for p in image_paths]
     if provider == "nvidia" or (provider is None and len(images) > 1 and use_nvidia_now()):
-        return _solve_one_by_one(images, provider)
+        return _solve_one_by_one(images, provider, texts)
     try:
-        return _solve_batch(images, provider)
+        return _solve_batch(images, provider, texts)
     except QuotaExceededError:
         # Gemini가 방금 한도에 걸림 -> NVIDIA 키가 있으면 한 장씩 보조 AI로
         if provider is None and len(images) > 1 and nvidia_available():
-            return _solve_one_by_one(images, provider)
+            return _solve_one_by_one(images, provider, texts)
         raise
 
 

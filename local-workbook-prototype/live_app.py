@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from config import LOG_FILENAME
 from core.cloze import BLANK_MARKS, build_cloze
 from core.grading import grade_answer
+from core.ocr_text import answer_count
 from core.page_questions import render_page
 from core.session_log import append_log, unit_review_summary
 from live_engine import answer_key, cached_page, ensure_answer, get_answer, page_png_path, prefetch_around, prepare_page
@@ -313,27 +314,55 @@ def guess_type(project_dir: Path, key: str, img_path: Path, q: dict) -> tuple[st
     return "short_answer", None  # 모르면 입력창으로 받아두고, 채점은 직접 확인으로
 
 
-def render_choices(key: str, entry: dict | None, disabled: bool):
-    """보기 내용을 알면 한 줄씩 목록으로, 모르면 ①~⑤ 동그라미 한 줄로 (화면을 덜 차지하게)."""
+def needed_picks(q: dict, entry: dict | None) -> int | None:
+    """골라야 할 보기 개수. 1이면 하나만 고르는 보통 문제.
+    책 글자의 "(정답 2개)"를 먼저 믿고, 글자가 없거나 1개라는데 AI 정답이 여러 개면 AI를 따른다.
+    None이면 "모두 고르면"처럼 개수를 모르는 여러 개 고르기."""
+    picks = q.get("picks", 1)
+    ai = answer_count((entry or {}).get("answer") or "")
+    if picks == 1 and ai > 1:
+        return ai
+    return picks
+
+
+def picked_set(selected: str | None) -> list[str]:
+    return [x for x in (selected or "").split(",") if x]
+
+
+def marks_of(selected: str) -> str:
+    """"2,5" -> "②, ⑤" (화면 표시용)."""
+    return ", ".join(CHOICE_MARKS[int(x) - 1] if x.isdigit() and 1 <= int(x) <= 5 else x for x in picked_set(selected))
+
+
+def render_choices(key: str, entry: dict | None, disabled: bool, picks: int | None = 1):
+    """보기 내용을 알면 한 줄씩 목록으로, 모르면 ①~⑤ 동그라미 한 줄로 (화면을 덜 차지하게).
+    picks가 1이 아니면 여러 개 고르기: 누를 때마다 골랐다/뺐다."""
     texts = (entry or {}).get("choices") or []
     n = max(4, min(5, len(texts))) if texts else 5
+    multi = picks != 1
+    chosen = picked_set(st.session_state.selected)
+    if multi and not disabled:
+        need = f"정답 {picks}개를 골라주세요" if picks else "정답을 모두 골라주세요"
+        st.caption(f"{need} · 지금 {len(chosen)}개 골랐어요")
     clicked = None
     if texts:
         for i in range(n):
             label = f"{CHOICE_MARKS[i]}   {texts[i]}" if i < len(texts) else CHOICE_MARKS[i]
-            picked = st.session_state.selected == str(i + 1)
             if st.button(label, key=f"choicerow_{key}_{i}", width="stretch",
-                         type="primary" if picked else "secondary", disabled=disabled):
+                         type="primary" if str(i + 1) in chosen else "secondary", disabled=disabled):
                 clicked = str(i + 1)
     else:
         cols = st.columns(n)
         for i in range(n):
-            picked = st.session_state.selected == str(i + 1)
             if cols[i].button(CHOICE_MARKS[i], key=f"choicechip_{key}_{i}", width="stretch",
-                              type="primary" if picked else "secondary", disabled=disabled):
+                              type="primary" if str(i + 1) in chosen else "secondary", disabled=disabled):
                 clicked = str(i + 1)
     if clicked:
-        st.session_state.selected = clicked
+        if multi:
+            chosen = [c for c in chosen if c != clicked] if clicked in chosen else chosen + [clicked]
+            st.session_state.selected = ",".join(sorted(chosen, key=int)) or None
+        else:
+            st.session_state.selected = clicked
         st.rerun()
 
 
@@ -386,8 +415,9 @@ def render_left(pdf_path: Path, project_dir: Path, total_pages: int, page: int, 
 
     # ── 답 고르기/입력 ──
     answer_value = None
+    picks = needed_picks(q, entry)
     if qtype == "multiple_choice":
-        render_choices(key, entry, disabled=locked)
+        render_choices(key, entry, disabled=locked, picks=picks)
         answer_value = st.session_state.selected
     elif not locked:
         answer_value = st.text_input("답", key=f"txt_{key}_{stage}", placeholder="답을 입력하세요", label_visibility="collapsed")
@@ -398,7 +428,9 @@ def render_left(pdf_path: Path, project_dir: Path, total_pages: int, page: int, 
             go_to(project_dir, page, idx + 1)
         return
 
-    no_choice = qtype == "multiple_choice" and not answer_value
+    no_choice = qtype == "multiple_choice" and (
+        not answer_value or (picks not in (None, 1) and len(picked_set(answer_value)) != picks)
+    )
     if st.button("채점하기", key=f"grade_{key}_{stage}", type="primary", width="stretch", disabled=no_choice):
         if not answer_value:
             st.warning("답을 입력해주세요.")
@@ -436,8 +468,8 @@ def render_self_check(project_dir: Path, key: str, qtype: str, log_path: Path, u
     """AI를 못 쓰는 동안(사용량 한도): 책 뒤 정답을 보고 직접 채점."""
     feedback("notice", st.session_state.notice or "지금은 AI로 채점할 수 없어요.", "책 뒤 정답을 보고 직접 채점해주세요.")
     mine = st.session_state.last_answer
-    if qtype == "multiple_choice" and mine and mine.isdigit():
-        mine = CHOICE_MARKS[int(mine) - 1]
+    if qtype == "multiple_choice" and mine and all(x.isdigit() for x in picked_set(mine)):
+        mine = marks_of(mine)
     st.markdown(f"**내 답:** {html.escape(mine)}")
     c1, c2 = st.columns(2)
     if c1.button("맞았어요", key=f"grade_self_o_{key}", type="primary", width="stretch"):

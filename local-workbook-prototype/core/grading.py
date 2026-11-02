@@ -53,12 +53,18 @@ def _strip_unit_suffix(s: str) -> str:
     return UNIT_SUFFIX_PATTERN.sub("", s, count=1)
 
 
+_CHOICE_TOKEN = re.compile(r"[①②③④⑤]|\d+")
+
+
 def normalize_multiple_choice(s: str) -> str:
-    """원문자/숫자를 모두 "숫자 하나" 형태로 통일."""
+    """원문자/숫자를 숫자로 통일. 정답이 여러 개면 순서와 상관없이 "2,5"처럼 정렬해서 쉼표로.
+    "③" == "3",  "②, ⑤" == "⑤,②" == "2,5"."""
     s = s.strip()
-    if s in CIRCLED_TO_DIGIT:
-        return CIRCLED_TO_DIGIT[s]
-    return s
+    tokens = _CHOICE_TOKEN.findall(s)
+    if not tokens:
+        return s
+    digits = sorted({CIRCLED_TO_DIGIT.get(t, t) for t in tokens}, key=int)
+    return ",".join(digits)
 
 
 def _parse_var_value_pairs(normalized: str) -> set | None:

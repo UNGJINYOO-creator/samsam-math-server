@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pymupdf as fitz  # noqa: E402
 
+from core.ocr_text import is_multiple_choice, pick_count  # noqa: E402
 from core.page_questions import detect_questions_by_text  # noqa: E402
 from scripts.check_nvidia import pick_pdf  # noqa: E402
 
@@ -68,7 +69,10 @@ def check_page(doc: fitz.Document, pdf: Path, page_no: int, out: list[str]) -> t
         if n >= 3:
             reasons.append(f"선/도형 {n}개 (그림·그래프나 분수가 있을 수 있음 — 글자만으로는 모양이 사라짐)")
         clean += not reasons
-        out.append(f"\n─── {q.no}번 : {'글자만으로 풀어도 될 듯' if not reasons else '글자만으로는 위험'}")
+        kind = "객관식" if is_multiple_choice(text) else "주관식"
+        if kind == "객관식" and pick_count(text) != 1:
+            kind += f" (정답 {pick_count(text) or '여러'}개 고르기)"
+        out.append(f"\n─── {q.no}번 [{kind}] : {'글자만으로 풀어도 될 듯' if not reasons else '글자만으로는 위험'}")
         out.append(text or "(글자 없음)")
         out.extend(f"   ⚠ {r}" for r in reasons)
     return len(questions), clean

@@ -23,6 +23,7 @@ import pymupdf as fitz
 
 from config import ANSWERS_FILENAME, PAGES_DIRNAME, QUESTIONS_DIRNAME
 from core.answer_parser import load_answers, save_answers
+from core.ocr_text import is_multiple_choice, pick_count
 from core.page_questions import crop_questions, detect_questions_by_text, render_page
 from subjects.math.ai_layout import detect_questions_by_ai
 from subjects.math.ai_solver import AISolveError, solve_questions
@@ -30,7 +31,7 @@ from subjects.math.gemini_client import GeminiError, quota_blocked_seconds
 
 PAGE_CACHE_DIRNAME = "page_cache"
 PREFETCH_AHEAD = 2  # 페이지에 남은 문제가 이만큼 이하가 되면 다음 페이지도 미리 푼다
-CIRCLED = "①②③④⑤"
+CACHE_VERSION = 2  # 2: 문제별 글자(text)·정답 개수(picks)·영역(bbox) 저장, "01" 번호 인식
 
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="prefetch")
 _answers_lock = threading.Lock()  # answers.json 읽고-고치고-쓰기를 한 번에 하나만
@@ -93,19 +94,19 @@ def _solve_page(project_dir: Path, page_no: int, gen: int) -> None:
     with _answers_lock:
         answers = load_answers(project_dir / ANSWERS_FILENAME)
     todo = [
-        (answer_key(page_no, i), Path(q["image"]))
+        (answer_key(page_no, i), Path(q["image"]), q.get("text") or "")
         for i, q in enumerate(data["questions"])
         if not (answers.get(answer_key(page_no, i)) or {}).get("answer")
     ]
     if not todo:
         return
-    results = solve_questions([img for _, img in todo])
+    results = solve_questions([img for _, img, _ in todo], texts=[t for _, _, t in todo])
     with _answers_lock:
         if _gen(project_dir, page_no) != gen:
             return  # 그사이 이 페이지 문제를 다시 찾았음 -> 옛 문제 기준 정답이라 버린다
         path = project_dir / ANSWERS_FILENAME
         answers = load_answers(path)
-        for (key, _), result in zip(todo, results):
+        for (key, _, _), result in zip(todo, results):
             answers[key] = {**result, "shape_dependent": False}
         save_answers(path, answers)
 
@@ -141,19 +142,43 @@ def _page_lock(project_dir: Path, page_no: int) -> threading.Lock:
         return _page_locks.setdefault(f"{project_dir}|{page_no}", threading.Lock())
 
 
-def _mc_hints(pdf_path: Path, page_no: int, bboxes: list, method: str) -> list[bool | None]:
-    """문제 영역 글자에 ①~⑤가 있으면 객관식(True). 글자로 찾은 페이지인데 없으면 False,
-    AI로 찾은 페이지(스캔본 등)는 글자로 판단할 수 없으니 None(모름)."""
-    hints: list[bool | None] = []
+def _text_info(pdf_path: Path, page_no: int, bboxes: list, method: str) -> list[dict]:
+    """문제 영역의 PDF 글자로 AI 없이 알 수 있는 것: 글자 자체, 객관식인지, 골라야 할 정답 개수.
+
+    mc_hint: ①~⑤가 있으면 True. 글자로 찾은 페이지인데 없으면 False,
+    AI로 찾은 페이지(스캔본 등)는 글자가 없을 수 있어 None(모름).
+    """
+    infos: list[dict] = []
     with fitz.open(str(pdf_path)) as doc:
         page = doc[page_no - 1]
         for bbox in bboxes:
-            text = page.get_text("text", clip=fitz.Rect(*bbox))
-            if any(c in text for c in CIRCLED):
-                hints.append(True)
-            else:
-                hints.append(False if method == "text" else None)
-    return hints
+            text = page.get_text("text", clip=fitz.Rect(*bbox)).strip()
+            mc = is_multiple_choice(text)
+            infos.append({
+                "text": text,
+                "mc_hint": True if mc else (False if method == "text" else None),
+                "picks": pick_count(text) if mc else 1,
+            })
+    return infos
+
+
+def _upgrade_cache(project_dir: Path, pdf_path: Path, page_no: int, data: dict, cache_path: Path) -> dict | None:
+    """예전 버전으로 저장된 페이지. 글자로 찾은 문제가 예전과 똑같으면 글자 정보만 덧붙이고
+    (잘라둔 그림과 이미 받은 정답은 그대로), 달라졌으면 None -> 처음부터 다시 처리한다."""
+    questions = detect_questions_by_text(str(pdf_path), page_no)
+    if not questions:
+        if data.get("method") == "text":
+            return None  # 예전엔 글자로 찾았는데 지금은 못 찾음 -> 다시 처리
+        data["v"] = CACHE_VERSION  # 글자로는 여전히 못 찾음 -> 예전(AI) 결과 유지
+    elif data.get("method") == "text" and [q.no for q in questions] == [q["no"] for q in data["questions"]]:
+        infos = _text_info(pdf_path, page_no, [q.bbox for q in questions], "text")
+        for q, pq, info in zip(data["questions"], questions, infos):
+            q.update(info, bbox=list(pq.bbox))
+        data["v"] = CACHE_VERSION
+    else:
+        return None  # 이번 버전에서 새로 글자로 찾게 됨("01" 번호 등) -> 다시 처리
+    cache_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return data
 
 
 def cached_page(project_dir: Path, page_no: int) -> dict | None:
@@ -164,12 +189,19 @@ def cached_page(project_dir: Path, page_no: int) -> dict | None:
 def prepare_page(project_dir: Path, pdf_path: Path, page_no: int, force_ai: bool = False) -> dict:
     """이 페이지의 문제 목록. 한 번 처리한 페이지는 page_cache에 저장해두고 재사용한다.
 
-    반환: {"method": "text"|"ai"|"none", "questions": [{"no", "image", "mc_hint"}], "error": str|None}
+    반환: {"method": "text"|"ai"|"none", "v": 버전, "error": str|None,
+           "questions": [{"no", "image", "bbox", "text", "mc_hint", "picks"}]}
+    picks: 골라야 할 정답 개수 (보통 1, "(정답 2개)"면 2, 개수 없이 "모두 고르면"이면 None)
     """
     with _page_lock(project_dir, page_no):
         cache_path = project_dir / PAGE_CACHE_DIRNAME / f"p{page_no:03d}.json"
         if cache_path.exists() and not force_ai:
-            return json.loads(cache_path.read_text(encoding="utf-8"))
+            data = json.loads(cache_path.read_text(encoding="utf-8"))
+            if data.get("v", 1) >= CACHE_VERSION:
+                return data
+            upgraded = _upgrade_cache(project_dir, pdf_path, page_no, data, cache_path)
+            if upgraded is not None:
+                return upgraded
 
         page_png = render_page(str(pdf_path), page_no, page_png_path(project_dir, page_no))
 
@@ -199,12 +231,14 @@ def prepare_page(project_dir: Path, pdf_path: Path, page_no: int, force_ai: bool
             old.unlink()
         cropped = crop_questions(page_png, questions, questions_dir, page_no)
         _forget_page_answers(project_dir, page_no)  # 문제 순서가 바뀌었을 수 있으니 이 페이지 정답은 새로 푼다
-        hints = _mc_hints(pdf_path, page_no, [q.bbox for q, _ in cropped], method)
+        infos = _text_info(pdf_path, page_no, [q.bbox for q, _ in cropped], method)
 
         data = {
             "method": method,
+            "v": CACHE_VERSION,
             "questions": [
-                {"no": q.no, "image": str(path), "mc_hint": hint} for (q, path), hint in zip(cropped, hints)
+                {"no": q.no, "image": str(path), "bbox": list(q.bbox), **info}
+                for (q, path), info in zip(cropped, infos)
             ],
             "error": None,
         }
