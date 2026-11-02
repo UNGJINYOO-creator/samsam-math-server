@@ -1,149 +1,720 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>삼삼수학 - AI 수학 과외</title>
-    <style>
-        body { font-family: 'Malgun Gothic', sans-serif; background-color: #f4f6f9; margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; height: 100vh; box-sizing: border-box; }
-        .app-header { width: 100%; max-width: 900px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        h2 { color: #2d3748; margin: 0; font-size: 22px; }
-        .main-layout { display: flex; width: 100%; max-width: 900px; gap: 15px; flex: 1; min-height: 0; }
-        
-        /* 왼쪽: 문제 영역 (작고 컴팩트하게) */
-        .left-panel { width: 32%; background: white; padding: 15px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: flex; flex-direction: column; justify-content: space-between; }
-        .problem-box { background: #edf2f7; padding: 12px; border-radius: 12px; font-size: 16px; line-height: 1.5; color: #4a5568; flex: 1; overflow-y: auto; margin-bottom: 10px; }
-        
-        /* 오른쪽: 필기 영역 (큼직하게) */
-        .right-panel { width: 68%; background: white; padding: 15px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: flex; flex-direction: column; }
-        .canvas-container { border: 2px solid #cbd5e1; border-radius: 12px; background: #ffffff; flex: 1; position: relative; overflow: hidden; }
-        canvas { display: block; touch-action: none; cursor: crosshair; width: 100%; height: 100%; }
-        
-        .btn { background: #4f46e5; color: white; border: none; padding: 12px; font-size: 15px; border-radius: 10px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 5px; }
-        .btn-secondary { background: #94a3b8; padding: 8px; font-size: 13px; }
-        .btn-submit { background: #10b981; }
-        
-        .result { margin-top: 10px; padding: 12px; border-radius: 10px; font-size: 14px; line-height: 1.5; white-space: pre-line; display: none; max-height: 120px; overflow-y: auto; }
-        .correct-box { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
-        .wrong-box { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#F2F4F6">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<title>마클리</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<style>
+:root {
+  --bg: #F2F4F6; --card: #FFFFFF; --text: #191F28; --sub: #4E5968; --muted: #8B95A1; --line: #E5E8EB;
+  --blue: #3182F6; --blue-weak: #E8F3FF; --green: #03A35F; --green-weak: #E6F7EF; --red: #E42939; --red-weak: #FFF0F0;
+  --yellow-weak: #FFF8E6; --yellow: #8A5A00;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font-family: "Pretendard Variable", Pretendard, -apple-system, "Malgun Gothic", sans-serif; }
+button { font: inherit; cursor: pointer; border: none; }
+input, select { font: inherit; color: var(--text); }
+.hidden { display: none !important; }
+
+.btn { background: var(--blue); color: #fff; border-radius: 16px; padding: 15px 18px; font-size: 17px; font-weight: 700; width: 100%; }
+.btn:disabled { background: #C9DFFC; cursor: default; }
+.btn.gray { background: #F2F4F6; color: var(--sub); }
+.btn.small { width: auto; padding: 9px 14px; font-size: 15px; border-radius: 12px; }
+.row { display: flex; gap: 8px; align-items: center; }
+.row > .btn { flex: 1; }
+
+/* 홈 */
+#home { max-width: 760px; margin: 0 auto; padding: 22px 16px 40px; }
+.top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.logo { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
+.logo span { color: var(--blue); }
+.card { background: var(--card); border-radius: 22px; padding: 20px; margin-bottom: 12px; }
+.card h3 { margin: 0 0 4px; font-size: 19px; }
+.card p.desc { margin: 0 0 14px; color: var(--sub); font-size: 15px; }
+.field { display: flex; gap: 8px; margin-bottom: 10px; }
+.field select, .field input { flex: 1; min-width: 0; border: 1.5px solid var(--line); border-radius: 12px; padding: 11px 12px; font-size: 16px; background: #fff; }
+.pageinput { display: flex; align-items: center; gap: 6px; }
+.pageinput input { width: 90px; text-align: center; flex: none; }
+.pageinput button { width: 44px; height: 44px; border-radius: 12px; background: #F2F4F6; font-size: 20px; color: var(--sub); }
+.preview { width: 100%; border-radius: 12px; border: 1px solid var(--line); margin: 4px 0 12px; max-height: 360px; object-fit: contain; background: #fafafa; }
+.seg { display: flex; background: #F2F4F6; border-radius: 12px; padding: 4px; margin-bottom: 12px; }
+.seg button { flex: 1; background: transparent; padding: 10px; border-radius: 9px; font-size: 16px; color: var(--sub); font-weight: 600; }
+.seg button.on { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.chip { background: var(--blue-weak); color: var(--blue); border-radius: 999px; padding: 5px 11px; font-size: 14px; font-weight: 600; }
+.chip.red { background: var(--red-weak); color: var(--red); }
+.recent { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); font-size: 16px; }
+.recent:first-of-type { border-top: none; }
+.recent small { color: var(--muted); }
+.bankinfo { background: #F9FAFB; border-radius: 12px; padding: 10px 12px; font-size: 14px; color: var(--sub); margin-bottom: 10px; }
+.bankinfo b { color: var(--text); }
+.badge { display: inline-block; border-radius: 999px; padding: 4px 10px; font-size: 14px; font-weight: 700; }
+.badge.ready { background: var(--green-weak); color: var(--green); }
+.badge.wait { background: var(--yellow-weak); color: var(--yellow); }
+.badge.skip { background: #F2F4F6; color: var(--muted); }
+.chip.level { background: #F2F4F6; color: var(--sub); margin-left: 4px; }
+.enddone { text-align: center; padding: 30px 0 10px; }
+.enddone div { font-size: 44px; }
+.enddone b { display: block; font-size: 21px; margin-top: 8px; }
+.enddone span { color: var(--sub); }
+#admin { max-width: 760px; margin: 0 auto; padding: 22px 16px 40px; }
+#admin .field input { max-width: 110px; text-align: center; }
+.banklog { margin-top: 10px; background: #F9FAFB; border-radius: 12px; padding: 10px 12px; font-size: 13.5px; color: var(--sub); line-height: 1.7; max-height: 260px; overflow-y: auto; }
+.notice { background: var(--yellow-weak); color: var(--yellow); border-radius: 14px; padding: 12px 14px; font-size: 15px; margin-bottom: 12px; }
+
+/* 풀이 화면 (시안 B: 왼쪽 문제 / 오른쪽 필기) */
+#solve { height: 100%; display: flex; gap: 12px; padding: 12px; }
+.left { flex: 0 0 43%; background: var(--card); border-radius: 22px; padding: 16px 20px 20px; overflow-y: auto; display: flex; flex-direction: column; }
+.right { flex: 1; background: var(--card); border-radius: 22px; padding: 10px; display: flex; flex-direction: column; min-width: 0; }
+.where { display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--sub); font-weight: 600; }
+.where .title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.where b { color: var(--text); }
+.back { background: #F2F4F6; color: var(--sub); border-radius: 10px; padding: 7px 11px; font-size: 15px; font-weight: 600; }
+.bar { height: 6px; background: #F2F4F6; border-radius: 99px; margin: 10px 0 14px; overflow: hidden; }
+.bar div { height: 100%; background: var(--blue); border-radius: 99px; transition: width .3s; }
+.question { font-size: 20px; line-height: 1.75; margin: 10px 0 16px; word-break: keep-all; }
+.question .katex { font-size: 1.12em; }
+.choices { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.choice { display: flex; gap: 12px; align-items: center; text-align: left; background: #fff; border: 1.5px solid var(--line); border-radius: 14px; padding: 11px 14px; font-size: 18px; min-height: 52px; color: var(--text); }
+.choice .mk { font-size: 20px; color: var(--muted); }
+.choice.on { background: var(--blue-weak); border-color: var(--blue); }
+.choice.on .mk { color: var(--blue); font-weight: 700; }
+.choice.answer { border-color: var(--green); background: var(--green-weak); }
+.choice:disabled { cursor: default; }
+.short { width: 100%; border: 1.5px solid var(--line); border-radius: 14px; padding: 14px; font-size: 20px; margin-bottom: 12px; }
+.short:focus, .field input:focus, .field select:focus { outline: none; border-color: var(--blue); }
+.fb { border-radius: 14px; padding: 12px 16px; font-size: 16px; line-height: 1.6; margin-bottom: 10px; }
+.fb b { display: block; font-size: 17px; }
+.fb.wrong { background: var(--red-weak); color: var(--red); }
+.fb.right { background: var(--green-weak); color: var(--green); }
+.fb.reveal { background: var(--blue-weak); color: var(--text); }
+.fb.notice { background: var(--yellow-weak); color: var(--yellow); }
+.fb .sub { color: var(--sub); display: block; margin-top: 4px; }
+.steps { background: #F9FAFB; border-radius: 14px; padding: 12px 16px; font-size: 18px; line-height: 2.1; margin-bottom: 10px; }
+.steps input { width: 84px; border: 1.5px solid var(--blue); border-radius: 8px; padding: 2px 6px; font-size: 17px; text-align: center; }
+.steps input.ok { border-color: var(--green); color: var(--green); background: var(--green-weak); }
+.steps input.no { border-color: var(--red); color: var(--red); background: var(--red-weak); }
+.steps .fix { color: var(--green); font-weight: 700; margin-left: 4px; }
+.actions { display: flex; flex-direction: column; gap: 8px; margin-top: auto; padding-top: 6px; }
+.tools { display: flex; gap: 6px; padding: 2px 2px 8px; align-items: center; }
+.tool { background: #F2F4F6; color: var(--sub); border-radius: 10px; padding: 8px 14px; font-size: 15px; font-weight: 600; }
+.tool.on { background: var(--text); color: #fff; }
+.tools .space { flex: 1; color: var(--muted); font-size: 14px; }
+.padwrap { flex: 1; position: relative; border-radius: 14px; overflow: hidden; background: #fff; border: 1px solid var(--line); }
+#pad { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+
+/* 기록 */
+#stats { max-width: 760px; margin: 0 auto; padding: 22px 16px 40px; }
+.nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.num { background: #F9FAFB; border-radius: 16px; padding: 14px; }
+.num small { color: var(--sub); font-size: 14px; }
+.num div { font-size: 26px; font-weight: 800; margin-top: 4px; }
+.crow { padding: 10px 0; border-top: 1px solid var(--line); }
+.crow:first-child { border-top: none; }
+.crow .name { display: flex; justify-content: space-between; font-size: 15px; }
+.crow .name small { color: var(--muted); }
+.crow .track { height: 8px; background: #F2F4F6; border-radius: 99px; margin-top: 6px; overflow: hidden; }
+.crow .track div { height: 100%; border-radius: 99px; }
+
+/* 기다리는 화면 */
+#loading { position: fixed; inset: 0; background: rgba(242,244,246,.92); display: flex; align-items: center; justify-content: center; z-index: 10; }
+#loading .box { background: #fff; border-radius: 22px; padding: 28px 30px; text-align: center; width: min(420px, 90vw); }
+.spin { width: 38px; height: 38px; border: 4px solid var(--blue-weak); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.9s linear infinite; margin: 0 auto 14px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading .msg { font-size: 17px; font-weight: 700; }
+#loading .sec { color: var(--muted); margin-top: 6px; font-size: 15px; }
+
+@media (max-width: 860px) {
+  #solve { flex-direction: column; height: auto; min-height: 100%; }
+  .left { flex: none; }
+  .right { flex: none; height: 70vh; }
+}
+</style>
 </head>
 <body>
-    <div class="app-header">
-        <h2>✨ 삼삼수학 AI 선생님</h2>
-        <button class="btn" style="width: auto; padding: 8px 16px; margin: 0;" onclick="getProblem()">새로운 문제 받기</button>
+
+<!-- ───────── 홈 ───────── -->
+<div id="home">
+  <div class="top">
+    <div class="logo">마클리<span>.</span></div>
+    <div class="row" style="gap:6px">
+      <button class="btn small gray" onclick="showStats()">📊 기록</button>
+      <button class="btn small gray" onclick="showAdmin()">⚙ 관리</button>
     </div>
+  </div>
+  <div id="quota" class="notice hidden"></div>
 
-    <div class="main-layout">
-        <!-- 왼쪽: 문제 및 결과 -->
-        <div class="left-panel">
-            <div>
-                <p style="margin: 0 0 8px 0; font-weight: bold; color: #64748b; font-size: 14px;">📝 오늘의 문제</p>
-                <div id="problemContainer" class="problem-box">위쪽의 [새로운 문제 받기] 버튼을 눌러주세요!</div>
-            </div>
-            <div>
-                <button class="btn btn-submit" onclick="submitAnswer()">정답 및 필기 채점하기</button>
-                <div id="resultText" class="result"></div>
-            </div>
-        </div>
-
-        <!-- 오른쪽: 대형 필기장 -->
-        <div class="right-panel">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                <span style="font-weight: bold; color: #64748b; font-size: 14px;">✍️ 여기에 손글씨로 풀이를 적어보세요</span>
-                <button class="btn btn-secondary" style="width: auto; margin: 0;" onclick="clearCanvas()">필기 지우기</button>
-            </div>
-            <div class="canvas-container">
-                <canvas id="pad"></canvas>
-            </div>
-        </div>
+  <div class="card">
+    <h3>📖 문제집으로 풀기</h3>
+    <p class="desc">쪽을 고르면 그 쪽 개념으로 숫자를 바꾼 새 문제를 풀어요. 문제 은행에 있는 쪽은 바로 시작해요.</p>
+    <div id="nobook" class="notice hidden">local-workbook-prototype 폴더에 문제집 PDF를 넣고 새로고침해주세요.</div>
+    <div id="bookbox">
+      <div class="field"><select id="book" onchange="onBookChange()"></select></div>
+      <div class="bankinfo" id="bankinfo"></div>
+      <div class="field pageinput">
+        <button onclick="stepPage(-1)">−</button>
+        <input id="page" type="number" min="1" inputmode="numeric" onchange="loadPreview()">
+        <button onclick="stepPage(1)">+</button>
+        <span id="pagecount" style="color:var(--muted)"></span>
+        <span id="pagebadge"></span>
+      </div>
+      <img id="preview" class="preview" alt="쪽 미리보기">
+      <button class="btn" id="openbtn" onclick="openBookPage()">바로 풀기</button>
     </div>
+  </div>
 
-    <script>
-        let currentProblem = "";
-        const canvas = document.getElementById('pad');
-        const ctx = canvas.getContext('2d');
-        
-        function resizeCanvas() {
-            canvas.width = canvas.parentElement.clientWidth;
-            canvas.height = canvas.parentElement.clientHeight;
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.strokeStyle = '#1e293b';
-            ctx.lineWidth = 4;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-        }
-        window.addEventListener('resize', resizeCanvas);
-        setTimeout(resizeCanvas, 100);
+  <div class="card">
+    <h3>🔀 섞어 풀기</h3>
+    <p class="desc">문제 은행에서 안 푼 문제를 골고루 6개. 공부한 쪽 문제부터 섞어요.</p>
+    <button class="btn" id="mixbtn" onclick="openMix()">섞어서 바로 풀기</button>
+    <details style="margin-top:14px">
+      <summary style="color:var(--sub);font-size:15px;cursor:pointer">문제집 없이 학년별 오늘의 문제 (AI가 지금 만들어서 30초쯤)</summary>
+      <div class="seg" id="grade" style="margin-top:10px">
+        <button onclick="pickGrade(this)">중1</button><button class="on" onclick="pickGrade(this)">중2</button><button onclick="pickGrade(this)">중3</button>
+      </div>
+      <button class="btn gray" onclick="openFree()">오늘의 문제 받기</button>
+    </details>
+  </div>
 
-        let drawing = false;
-        function getPos(e) {
-            const rect = canvas.getBoundingClientRect();
-            let clientX = e.clientX, clientY = e.clientY;
-            if (e.touches && e.touches.length > 0) {
-                clientX = e.touches[0].clientX;
-                clientY = e.touches[0].clientY;
-            }
-            return { x: clientX - rect.left, y: clientY - rect.top };
-        }
+  <div class="card">
+    <h3>🔁 틀린 유형 복습</h3>
+    <p class="desc">틀렸던 유형만 모아서 새 문제로 다시 풀어요.</p>
+    <div class="chips" id="weak"></div>
+    <button class="btn" id="reviewbtn" onclick="openReview()">복습 문제 받기</button>
+  </div>
 
-        canvas.addEventListener('mousedown', (e) => { drawing = true; const pos = getPos(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y); });
-        canvas.addEventListener('mousemove', (e) => { if (!drawing) return; const pos = getPos(e); ctx.lineTo(pos.x, pos.y); ctx.stroke(); });
-        canvas.addEventListener('mouseup', () => drawing = false);
-        canvas.addEventListener('mouseleave', () => drawing = false);
+  <div class="card" id="recentcard">
+    <h3>이어서 풀기</h3>
+    <div id="recent"></div>
+  </div>
+</div>
 
-        canvas.addEventListener('touchstart', (e) => { drawing = true; const pos = getPos(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y); e.preventDefault(); });
-        canvas.addEventListener('touchmove', (e) => { if (!drawing) return; const pos = getPos(e); ctx.lineTo(pos.x, pos.y); ctx.stroke(); e.preventDefault(); });
-        canvas.addEventListener('touchend', () => drawing = false);
+<!-- ───────── 풀이 ───────── -->
+<div id="solve" class="hidden">
+  <div class="left">
+    <div class="where">
+      <button class="back" onclick="goHome()">← 홈</button>
+      <span class="title" id="settitle"></span>
+      <span id="count"></span>
+    </div>
+    <div class="bar"><div id="barfill"></div></div>
+    <div><span class="chip" id="concept"></span><span class="chip level" id="level"></span></div>
+    <div class="question" id="question"></div>
+    <div class="choices" id="choices"></div>
+    <input class="short hidden" id="short" placeholder="답을 입력하세요" autocomplete="off" oninput="onShortInput()">
+    <div id="feedback"></div>
+    <div id="cloze"></div>
+    <div class="actions" id="actions"></div>
+  </div>
+  <div class="right">
+    <div class="tools">
+      <button class="tool on" id="penbtn" onclick="setTool('pen')">✏️ 펜</button>
+      <button class="tool" id="eraserbtn" onclick="setTool('eraser')">지우개</button>
+      <button class="tool" onclick="clearPad()">전체 지우기</button>
+      <span class="space">여기에 풀이를 써보세요</span>
+    </div>
+    <div class="padwrap" id="padwrap"><canvas id="pad"></canvas></div>
+  </div>
+</div>
 
-        function clearCanvas() {
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-        }
+<!-- ───────── 기록 ───────── -->
+<div id="stats" class="hidden">
+  <div class="top">
+    <div class="logo">기록<span>.</span></div>
+    <button class="btn small gray" onclick="goHome()">← 홈</button>
+  </div>
+  <div class="card">
+    <div class="nums">
+      <div class="num"><small>오늘 푼 문제</small><div id="s_today">0</div></div>
+      <div class="num"><small>오늘 첫 시도 정답률</small><div id="s_today_acc">-</div></div>
+      <div class="num"><small>지금까지</small><div id="s_total">0</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>유형별 정답률 <small style="color:var(--muted);font-weight:500">(첫 시도 기준, 낮은 순)</small></h3>
+    <div id="s_concepts"></div>
+  </div>
+</div>
 
-        async function getProblem() {
-            const pBox = document.getElementById('problemContainer');
-            pBox.innerText = "AI가 문제를 만드는 중... ✍️";
-            clearCanvas();
-            const resDiv = document.getElementById('resultText');
-            resDiv.style.display = 'none';
+<!-- ───────── 관리: 문제 은행 채우기 · 앱 업데이트 ───────── -->
+<div id="admin" class="hidden">
+  <div class="top">
+    <div class="logo">관리<span>.</span></div>
+    <button class="btn small gray" onclick="leaveAdmin()">← 홈</button>
+  </div>
 
-            const res = await fetch('/generate-problem');
-            const data = await res.json();
-            currentProblem = data.problem;
-            pBox.innerText = currentProblem;
-        }
+  <div class="card">
+    <h3>🏦 문제 은행 채우기</h3>
+    <p class="desc">PC가 쪽을 넘기면서 새 문제와 정답을 미리 만들어 둬요. 쪽당 20~40초, 무료는 하루 약 20쪽.
+      한도에 걸리면 기다렸다가 자동으로 이어서 해요. <b>PC와 마클리 창은 켜두세요.</b></p>
+    <div class="field"><select id="abook" onchange="onAdminBook()"></select></div>
+    <div class="bankinfo" id="abankinfo"></div>
+    <div class="field" style="align-items:center">
+      <input id="afrom" type="number" inputmode="numeric" min="1"> <span style="color:var(--muted)">쪽부터</span>
+      <input id="ato" type="number" inputmode="numeric" min="1"> <span style="color:var(--muted)">쪽까지</span>
+    </div>
+    <button class="btn" id="bankbtn" onclick="toggleBank()">만들기 시작</button>
+    <div id="bankprog" class="hidden" style="margin-top:14px">
+      <div class="bar"><div id="bankbar"></div></div>
+      <div id="bankline" style="font-weight:700"></div>
+      <div id="banklog" class="banklog"></div>
+    </div>
+  </div>
 
-        async function submitAnswer() {
-            if(!currentProblem) {
-                alert("먼저 문제를 받아주세요!");
-                return;
-            }
-            const resDiv = document.getElementById('resultText');
-            resDiv.style.display = 'block';
-            resDiv.className = "result";
-            resDiv.style.background = "#f1f5f9";
-            resDiv.style.color = "#4a5568";
-            resDiv.innerText = "🧐 AI가 필기를 분석 중...";
+  <div class="card">
+    <h3>⬇️ 앱 업데이트</h3>
+    <p class="desc" id="ver"></p>
+    <div id="updmsg"></div>
+    <button class="btn gray" id="updbtn" onclick="checkUpdate()">업데이트 확인</button>
+  </div>
+</div>
 
-            const imageBase64 = canvas.toDataURL('image/png');
+<div id="loading" class="hidden"><div class="box"><div class="spin"></div><div class="msg" id="loadmsg"></div><div class="sec" id="loadsec"></div></div></div>
 
-            const res = await fetch('/api/check-handwriting', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ problem: currentProblem, image: imageBase64 })
-            });
-            const data = await res.json();
+<script>
+const MARKS = "①②③④⑤";
+let S = null;          // 지금 풀고 있는 세트
+let idx = 0;           // 세트 안 문제 순서
+let stage = "try1";    // try1 -> try2 -> done
+let selected = null;   // 고른 보기 "1"~"5"
+let lastAnswer = "";
+let home = null;
 
-            if(data.is_correct) {
-                resDiv.className = "result correct-box";
-                resDiv.innerText = "🎉 정답!\n" + data.feedback;
-            } else {
-                resDiv.className = "result wrong-box";
-                resDiv.innerText = "❌ 오답!\n" + data.feedback;
-            }
-        }
-    </script>
+// ───────── 공통 ─────────
+const $ = id => document.getElementById(id);
+function show(id) { for (const s of ["home", "solve", "stats", "admin"]) $(s).classList.toggle("hidden", s !== id); }
+function esc(t) { return String(t ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+// 문장 속 분수가 너무 작게 보이지 않게 \frac -> \dfrac (태블릿에서 읽기 쉽게)
+function big(t) { return String(t ?? "").replace(/\\frac/g, "\\dfrac"); }
+function math(el) {
+  if (window.renderMathInElement) renderMathInElement(el, {delimiters: [{left: "$$", right: "$$", display: true}, {left: "$", right: "$", display: false}], throwOnError: false});
+}
+let loadTimer = null;
+function loading(msg) {
+  if (!msg) { $("loading").classList.add("hidden"); clearInterval(loadTimer); return; }
+  $("loadmsg").textContent = msg; $("loading").classList.remove("hidden");
+  const t0 = Date.now(); $("loadsec").textContent = "";
+  clearInterval(loadTimer);
+  loadTimer = setInterval(() => { $("loadsec").textContent = `${Math.round((Date.now() - t0) / 1000)}초 지났어요`; }, 1000);
+}
+async function api(path, body) {
+  const opt = body === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)};
+  const res = await fetch(path, opt);
+  const data = await res.json().catch(() => ({error: "서버 응답을 읽지 못했어요."}));
+  if (!res.ok) throw new Error(data.error || data.detail || "문제가 생겼어요. 다시 시도해주세요.");
+  return data;
+}
+async function withLoading(msg, fn) {
+  loading(msg);
+  try { return await fn(); }
+  catch (e) { alert(e.message); return null; }
+  finally { loading(null); }
+}
+
+// ───────── 홈 ─────────
+async function goHome() {
+  show("home");
+  home = await api("/api/home").catch(e => { alert(e.message); return null; });
+  if (!home) return;
+  const q = $("quota");
+  q.classList.toggle("hidden", !home.quota_minutes);
+  q.textContent = home.quota_minutes ? `Gemini 무료 사용량을 다 썼어요. 약 ${home.quota_minutes}분 뒤 다시 쓸 수 있어요.` +
+    (home.backup_ai ? " 그동안은 보조 AI(NVIDIA)로 만들어요 (조금 느려요)." : "") : "";
+
+  const hasBooks = home.books.length > 0;
+  $("nobook").classList.toggle("hidden", hasBooks);
+  $("bookbox").classList.toggle("hidden", !hasBooks);
+  const sel = $("book"); const prev = sel.value;
+  sel.innerHTML = home.books.map(b => `<option value="${esc(b.name)}">${esc(b.name.replace(/\.pdf$/i, ""))}</option>`).join("");
+  if (prev && home.books.some(b => b.name === prev)) sel.value = prev;
+  if (hasBooks) onBookChange(true);
+
+  $("weak").innerHTML = home.weak.length ? home.weak.map(w => `<span class="chip red">${esc(w.concept)}</span>`).join("")
+    : `<span style="color:var(--muted);font-size:15px">아직 틀린 유형이 없어요.</span>`;
+  $("reviewbtn").disabled = !home.weak.length;
+  $("mixbtn").disabled = !home.books.some(b => b.bank.problems > 0);
+
+  $("recentcard").classList.toggle("hidden", !home.recent.length);
+  $("recent").innerHTML = home.recent.map(r => `<div class="recent"><div>${esc(r.title)}<br><small>${r.total - r.left}/${r.total} 풀었어요</small></div>
+    <button class="btn small" onclick="resume('${esc(r.id)}')">${r.left ? "이어서" : "더 풀기"}</button></div>`).join("");
+}
+function currentBook() { return home.books.find(b => b.name === $("book").value); }
+function onBookChange(keepPage) {
+  const b = currentBook(); if (!b) return;
+  $("page").max = b.pages; $("pagecount").textContent = `/ ${b.pages}쪽`;
+  if (!keepPage || !$("page").value) $("page").value = b.last_page || b.bank.ready_pages[0] || Math.min(14, b.pages);
+  $("bankinfo").innerHTML = b.bank.problems
+    ? `문제 은행: <b>${esc(b.bank.ranges)}쪽</b> 준비됨 · 문제 ${b.bank.problems}개`
+    : `문제 은행이 아직 비어 있어요. PC에서 <b>run_bank.bat</b>을 실행하면 미리 만들어 둬요.`;
+  loadPreview();
+}
+function pageState(b, p) {
+  if (b.bank.ready_pages.includes(p)) return "ready";
+  if (b.bank.skipped.includes(p)) return "skip";
+  return "wait";
+}
+function updateBadge() {
+  const b = currentBook(); const p = parseInt($("page").value);
+  if (!b || !(p >= 1)) return;
+  const st = pageState(b, p);
+  $("pagebadge").innerHTML = {ready: `<span class="badge ready">바로 풀 수 있어요</span>`,
+    skip: `<span class="badge skip">문제 없는 쪽</span>`, wait: `<span class="badge wait">은행에 아직 없음</span>`}[st];
+  $("openbtn").textContent = st === "wait" ? "AI로 지금 만들어서 풀기 (30초쯤)" : "바로 풀기";
+  $("openbtn").disabled = st === "skip";
+}
+function stepPage(d) {
+  const b = currentBook(); if (!b) return;
+  $("page").value = Math.min(b.pages, Math.max(1, (parseInt($("page").value) || 1) + d));
+  loadPreview();
+}
+let previewTimer = null;
+function loadPreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => {
+    const b = currentBook(); const p = parseInt($("page").value);
+    if (b && p >= 1 && p <= b.pages) $("preview").src = `/api/books/${encodeURIComponent(b.name)}/page/${p}.png`;
+  }, 250);
+  updateBadge();
+}
+function pickGrade(btn) { for (const b of $("grade").children) b.classList.toggle("on", b === btn); }
+
+async function openBookPage() {
+  const b = currentBook(); const page = parseInt($("page").value);
+  if (!b || !(page >= 1 && page <= b.pages)) return alert("쪽 번호를 확인해주세요.");
+  openPage(b.name, page, pageState(b, page) === "ready");
+}
+async function openPage(book, page, ready) {
+  const msg = ready ? "불러오는 중" : `AI가 ${page}쪽을 읽고 새 문제를 만드는 중이에요`;
+  const data = await withLoading(msg, () => api("/api/sets/book", {book, page}));
+  if (data) startSet(data);
+}
+async function openMix() {
+  const data = await withLoading("불러오는 중", () => api("/api/sets/mix", {}));
+  if (data) startSet(data);
+}
+async function openFree() {
+  const grade = [...$("grade").children].find(b => b.classList.contains("on")).textContent;
+  const data = await withLoading("오늘의 문제를 만드는 중이에요", () => api("/api/sets/free", {grade}));
+  if (data) startSet(data);
+}
+async function openReview() {
+  const data = await withLoading("틀렸던 유형으로 새 문제를 만드는 중이에요", () => api("/api/sets/review", {}));
+  if (data) startSet(data);
+}
+async function resume(id) {
+  const data = await withLoading("불러오는 중", () => api(`/api/sets/${id}`));
+  if (!data) return;
+  if (data.problems.every(p => p.result)) return startSet(data, true);
+  startSet(data);
+}
+
+// ───────── 풀이 ─────────
+function startSet(data, wantMore) {
+  S = data;
+  show("solve"); sizePad();
+  const first = S.problems.findIndex(p => !p.result);
+  if (first < 0 || wantMore) return nextProblem();
+  idx = first; renderProblem();
+}
+function renderProblem() {
+  const p = S.problems[idx];
+  stage = "try1"; selected = null; lastAnswer = "";
+  $("settitle").textContent = S.title;
+  const done = S.problems.filter(x => x.result).length;
+  $("count").innerHTML = `<b>${idx + 1}</b> / ${S.problems.length}`;
+  $("barfill").style.width = `${Math.round(100 * done / S.problems.length)}%`;
+  $("concept").textContent = p.concept;
+  $("level").textContent = p.level || ""; $("level").classList.toggle("hidden", !p.level);
+  $("question").textContent = big(p.question); math($("question"));
+  $("feedback").innerHTML = ""; $("cloze").innerHTML = "";
+  const isMC = p.type === "multiple_choice";
+  $("short").classList.toggle("hidden", isMC);
+  $("short").value = ""; $("short").disabled = false;
+  renderChoices(p, false);
+  renderActions();
+  clearPad();
+}
+function renderChoices(p, locked, answerMark) {
+  const box = $("choices");
+  if (p.type !== "multiple_choice") { box.innerHTML = ""; return; }
+  box.innerHTML = p.choices.map((c, i) => {
+    const on = selected === String(i + 1);
+    const ans = answerMark && MARKS[i] === answerMark;
+    return `<button class="choice ${on ? "on" : ""} ${ans ? "answer" : ""}" ${locked ? "disabled" : ""} onclick="pick(${i + 1})">
+      <span class="mk">${MARKS[i]}</span><span class="ct"></span></button>`;
+  }).join("");
+  [...box.querySelectorAll(".ct")].forEach((el, i) => { el.textContent = big(p.choices[i]); });
+  math(box);
+}
+function pick(n) { selected = String(n); renderChoices(S.problems[idx], false); renderActions(); }
+function onShortInput() { renderActions(); }
+function myAnswer() { return S.problems[idx].type === "multiple_choice" ? selected : $("short").value.trim(); }
+
+function renderActions(extra) {
+  const a = $("actions");
+  if (stage === "done") { a.innerHTML = extra || ""; return; }
+  a.innerHTML = `<button class="btn" id="gradebtn" ${myAnswer() ? "" : "disabled"} onclick="submitAnswer()">채점하기</button>`;
+}
+function feedback(kind, title, sub) {
+  $("feedback").innerHTML = `<div class="fb ${kind}"><b>${esc(title)}</b>${sub ? `<span class="sub">${esc(sub)}</span>` : ""}</div>`;
+  math($("feedback"));
+}
+
+async function submitAnswer() {
+  const p = S.problems[idx]; const answer = myAnswer();
+  if (!answer) return;
+  lastAnswer = answer;
+  $("gradebtn").disabled = true;
+  let r;
+  try { r = await api(`/api/sets/${S.id}/grade`, {problem_id: p.id, answer, attempt: stage === "try1" ? 1 : 2}); }
+  catch (e) { alert(e.message); renderActions(); return; }
+
+  if (r.ok) {
+    const firstTry = stage === "try1";
+    p.result = firstTry ? "right" : "retry_right";
+    stage = "done";
+    feedback("right", firstTry ? "정답이에요!" : "정답이에요! 다시 풀어서 맞혔어요", r.explanation);
+    lockInputs(r.answer);
+    renderActions(`<button class="btn" onclick="nextProblem()">다음 문제</button>`);
+  } else if (stage === "try1") {
+    stage = "try2"; selected = null;
+    feedback("wrong", "아쉬워요. 힌트를 보고 다시 풀어볼까요?", r.hint);
+    renderChoices(p, false);
+    if (p.type !== "multiple_choice") $("short").select();
+    renderActions();
+  } else {
+    p.result = "wrong"; stage = "done";
+    feedback("reveal", `정답은 ${r.answer_text} 예요`, r.explanation);
+    lockInputs(r.answer);
+    if (r.blanks) renderCloze(r.cloze);
+    renderActions(`
+      <button class="btn gray" onclick="askHandwriting()">✍️ 내 풀이 어디가 틀렸는지 보기</button>
+      <div class="row"><button class="btn gray" onclick="sameType()">같은 유형 한 문제 더</button>
+      <button class="btn" onclick="nextProblem()">다음 문제</button></div>`);
+  }
+}
+function lockInputs(answerMark) {
+  const p = S.problems[idx];
+  $("short").disabled = true;
+  renderChoices(p, true, p.type === "multiple_choice" ? answerMark : null);
+}
+
+function renderCloze(lines) {
+  const html = lines.map(line => esc(line).replace(/\(\s*([㉠-㉧])\s*\)/g, (_, m) => `<input data-mk="${m}" autocomplete="off">`)).join("<br>");
+  $("cloze").innerHTML = `<div class="fb wrong" style="margin-top:2px"><b>풀이를 따라가며 빈칸을 채워볼까요?</b></div>
+    <div class="steps" id="steps">${html}</div>
+    <button class="btn" id="blankbtn" onclick="checkBlanks()">빈칸 확인하기</button>`;
+}
+async function checkBlanks() {
+  const inputs = [...$("steps").querySelectorAll("input")];
+  const r = await api(`/api/sets/${S.id}/blanks`, {problem_id: S.problems[idx].id, typed: inputs.map(i => i.value)}).catch(e => alert(e.message));
+  if (!r) return;
+  inputs.forEach((inp, i) => {
+    inp.disabled = true; inp.classList.add(r.results[i] ? "ok" : "no");
+    if (!r.results[i]) inp.insertAdjacentHTML("afterend", `<span class="fix">${esc(r.answers[i])}</span>`);
+  });
+  const right = r.results.filter(Boolean).length;
+  $("blankbtn").outerHTML = `<div class="fb ${right === r.results.length ? "right" : "reveal"}"><b>빈칸 ${r.results.length}개 중 ${right}개 맞혔어요</b></div>`;
+}
+
+async function askHandwriting() {
+  const p = S.problems[idx];
+  const image = padImage();
+  if (!image) return alert("오른쪽에 풀이를 먼저 써주세요.");
+  const r = await withLoading("AI 선생님이 풀이를 보는 중이에요", () =>
+    api(`/api/sets/${S.id}/handwriting`, {problem_id: p.id, image, mine: lastAnswer}));
+  if (r) $("cloze").insertAdjacentHTML("afterbegin", `<div class="fb notice"><b>✍️ 내 풀이 확인</b><span class="sub">${esc(r.feedback)}</span></div>`);
+}
+
+async function sameType() {
+  const p = S.problems[idx];
+  const r = await withLoading("같은 유형 문제를 준비하는 중이에요", () => api(`/api/sets/${S.id}/same-type`, {problem_id: p.id}));
+  if (!r) return;
+  S = r; idx = S.problems.findIndex(x => x.id === r.next_id); renderProblem();
+}
+
+async function nextProblem() {
+  let n = S.problems.findIndex((p, i) => i > idx && !p.result);
+  if (n < 0) n = S.problems.findIndex(p => !p.result);
+  if (n < 0) return renderEnd();
+  idx = n; renderProblem();
+}
+function renderEnd() {
+  const right = S.problems.filter(p => p.result === "right").length;
+  $("count").textContent = ""; $("barfill").style.width = "100%";
+  $("concept").textContent = "다 풀었어요"; $("level").classList.add("hidden");
+  $("question").innerHTML = `<div class="enddone"><div>🎉</div><b>${S.problems.length}문제를 다 풀었어요</b>
+    <span>한 번에 맞힌 문제 ${right}개</span></div>`;
+  $("choices").innerHTML = ""; $("short").classList.add("hidden"); $("feedback").innerHTML = ""; $("cloze").innerHTML = "";
+  stage = "done";
+  const nextPage = S.next_ready_page;
+  renderActions(`
+    ${nextPage ? `<button class="btn" onclick="openPage(S.book, ${nextPage}, true)">다음 쪽 (${nextPage}쪽) 바로 풀기</button>` : ""}
+    ${S.kind !== "book" ? `<button class="btn" onclick="openMix()">섞어서 6문제 더</button>` : ""}
+    <button class="btn gray" onclick="moreAI()">AI로 이 개념 문제 더 만들기 (30초쯤)</button>
+    <button class="btn gray" onclick="goHome()">홈으로</button>`);
+}
+async function moreAI() {
+  const r = await withLoading("문제를 더 만드는 중이에요", () => api(`/api/sets/${S.id}/more`, {}));
+  if (!r) return;
+  S = r; const n = S.problems.findIndex(p => !p.result);
+  if (n < 0) return alert("새 문제를 만들지 못했어요. 다시 시도해주세요.");
+  idx = n; renderProblem();
+}
+
+// ───────── 필기장 ─────────
+const pad = $("pad"); const ctx = pad.getContext("2d");
+let tool = "pen", drawing = false, last = null, penSeen = false;
+function sizePad() {
+  const r = $("padwrap").getBoundingClientRect(); const dpr = window.devicePixelRatio || 1;
+  if (!r.width) return;
+  const old = document.createElement("canvas"); old.width = pad.width; old.height = pad.height;
+  if (pad.width) old.getContext("2d").drawImage(pad, 0, 0);
+  pad.width = Math.round(r.width * dpr); pad.height = Math.round(r.height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, r.width, r.height);
+  if (old.width) ctx.drawImage(old, 0, 0, old.width / dpr, old.height / dpr);
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+}
+function setTool(t) { tool = t; $("penbtn").classList.toggle("on", t === "pen"); $("eraserbtn").classList.toggle("on", t === "eraser"); }
+function clearPad() { const r = $("padwrap").getBoundingClientRect(); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, r.width, r.height); pad.dataset.ink = ""; }
+function pos(e) { const r = pad.getBoundingClientRect(); return {x: e.clientX - r.left, y: e.clientY - r.top}; }
+pad.addEventListener("pointerdown", e => {
+  if (e.pointerType === "pen") penSeen = true;
+  if (penSeen && e.pointerType === "touch") return;  // 펜을 쓰는 중이면 손바닥 터치는 무시
+  drawing = true; last = pos(e); pad.setPointerCapture(e.pointerId);
+});
+pad.addEventListener("pointermove", e => {
+  if (!drawing) return;
+  const p = pos(e);
+  ctx.strokeStyle = tool === "pen" ? "#191F28" : "#fff";
+  ctx.lineWidth = tool === "pen" ? 2.6 : 28;
+  ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+  last = p; if (tool === "pen") pad.dataset.ink = "1";
+});
+["pointerup", "pointercancel", "pointerleave"].forEach(ev => pad.addEventListener(ev, () => { drawing = false; }));
+window.addEventListener("resize", sizePad);
+function padImage() {
+  if (!pad.dataset.ink) return null;
+  const maxW = 1200, scale = Math.min(1, maxW / pad.width);
+  const c = document.createElement("canvas"); c.width = pad.width * scale; c.height = pad.height * scale;
+  c.getContext("2d").drawImage(pad, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.85);
+}
+
+// ───────── 관리 ─────────
+let bankTimer = null;
+async function showAdmin() {
+  if (!home) await goHome();
+  show("admin");
+  $("abook").innerHTML = home.books.map(b => `<option value="${esc(b.name)}">${esc(b.name.replace(/\.pdf$/i, ""))}</option>`).join("");
+  if (home.books.length) { $("abook").value = $("book").value || home.books[0].name; onAdminBook(); }
+  const v = await api("/api/admin/version").catch(() => null);
+  $("ver").textContent = v ? `지금 버전: ${v.commit} (${v.date})` : "";
+  $("updmsg").innerHTML = ""; $("updbtn").textContent = "업데이트 확인"; $("updbtn").onclick = checkUpdate;
+  await pollBank();
+  clearInterval(bankTimer); bankTimer = setInterval(pollBank, 2000);
+}
+function leaveAdmin() { clearInterval(bankTimer); goHome(); }
+function onAdminBook() {
+  const b = home.books.find(x => x.name === $("abook").value); if (!b) return;
+  $("abankinfo").innerHTML = b.bank.problems ? `지금 은행: <b>${esc(b.bank.ranges)}쪽</b> · 문제 ${b.bank.problems}개` : "아직 은행이 비어 있어요.";
+  const from = b.bank.last_done && b.bank.last_done < b.pages ? b.bank.last_done + 1 : Math.min(14, b.pages);
+  $("afrom").value = from; $("ato").value = Math.min(b.pages, from + 29);
+  $("afrom").max = $("ato").max = b.pages;
+}
+function fmtWait(sec) { const h = Math.floor(sec / 3600), m = Math.ceil((sec % 3600) / 60); return h ? `${h}시간 ${m}분` : `${m}분`; }
+async function pollBank() {
+  const s = await api("/api/admin/bank").catch(() => null);
+  if (!s) return;
+  const running = s.running;
+  $("bankbtn").textContent = running ? "멈추기" : "만들기 시작";
+  $("bankbtn").classList.toggle("gray", running);
+  $("bankprog").classList.toggle("hidden", !s.log || !s.log.length && !running);
+  if (s.total !== undefined) {
+    $("bankbar").style.width = s.total ? `${Math.round(100 * s.done / s.total)}%` : "100%";
+    let line = "";
+    if (running && s.waiting_seconds) line = `⏳ 무료 한도 대기 중 · 약 ${fmtWait(s.waiting_seconds)} 뒤 자동으로 이어서`;
+    else if (running) line = `${s.current ?? ""}쪽 만드는 중 · ${s.done}/${s.total}쪽 · 문제 ${s.made}개` + (s.eta_minutes ? ` · 남은 시간 약 ${s.eta_minutes}분` : "");
+    else if (s.finished) line = s.stopped ? `멈춤 · ${s.done}/${s.total}쪽 · 문제 ${s.made}개` : `완료 · 문제 ${s.made}개 만들었어요`;
+    $("bankline").textContent = line;
+    $("banklog").innerHTML = (s.log || []).slice().reverse().map(esc).join("<br>");
+  }
+  if (!running && s.finished && $("bankbtn").dataset.wasRunning === "1") {  // 방금 끝났으면 은행 정보 새로고침
+    home = await api("/api/home").catch(() => home); onAdminBook();
+  }
+  $("bankbtn").dataset.wasRunning = running ? "1" : "0";
+}
+async function toggleBank() {
+  if ($("bankbtn").dataset.wasRunning === "1") {
+    await api("/api/admin/bank/stop", {}).catch(e => alert(e.message));
+    $("bankline").textContent = "멈추는 중... (지금 쪽까지만 하고 멈춰요)";
+    return;
+  }
+  const first = parseInt($("afrom").value), last = parseInt($("ato").value);
+  try { await api("/api/admin/bank/start", {book: $("abook").value, first, last}); }
+  catch (e) { return alert(e.message); }
+  pollBank();
+}
+async function checkUpdate() {
+  $("updbtn").disabled = true; $("updmsg").innerHTML = `<div class="fb reveal"><b>확인하는 중...</b></div>`;
+  try {
+    const r = await api("/api/admin/update/check", {});
+    if (!r.behind) {
+      $("updmsg").innerHTML = `<div class="fb right"><b>최신 버전이에요 ✅</b></div>`;
+    } else {
+      $("updmsg").innerHTML = `<div class="fb notice"><b>새 업데이트가 있어요</b><span class="sub">${r.behind}개 변경 · ${esc(r.latest_date)}</span></div>`;
+      $("updbtn").textContent = "지금 업데이트하기"; $("updbtn").classList.remove("gray"); $("updbtn").onclick = applyUpdate;
+    }
+  } catch (e) { $("updmsg").innerHTML = `<div class="fb wrong"><b>확인하지 못했어요</b><span class="sub">${esc(e.message)}</span></div>`; }
+  $("updbtn").disabled = false;
+}
+async function applyUpdate() {
+  const bankRunning = $("bankbtn").dataset.wasRunning === "1";
+  if (!confirm("업데이트하면 마클리가 잠깐 꺼졌다 다시 켜져요." + (bankRunning ? " 만들던 문제 은행은 멈추고, 다시 시작하면 이어서 해요." : "") + " 계속할까요?")) return;
+  clearInterval(bankTimer);
+  loading("업데이트를 받는 중이에요");
+  let r;
+  try { r = await api("/api/admin/update/apply", {}); }
+  catch (e) { loading(null); return alert(e.message); }
+  if (!r.updated) { loading(null); $("updmsg").innerHTML = `<div class="fb right"><b>이미 최신 버전이에요 ✅</b></div>`; return; }
+  loading("새 버전으로 다시 켜는 중이에요");
+  const t0 = Date.now();
+  await new Promise(res => setTimeout(res, 3000));
+  while (Date.now() - t0 < 120000) {
+    const v = await fetch("/api/admin/version").then(x => x.json()).catch(() => null);
+    if (v && v.commit === r.commit) { location.reload(); return; }
+    await new Promise(res => setTimeout(res, 2000));
+  }
+  loading(null);
+  alert("다시 켜지는 데 오래 걸려요. PC의 마클리 창을 확인해주세요.");
+}
+
+// ───────── 기록 ─────────
+async function showStats() {
+  const s = await api("/api/stats").catch(e => { alert(e.message); return null; });
+  if (!s) return;
+  show("stats");
+  const pct = v => v == null ? "-" : `${Math.round(v * 100)}%`;
+  $("s_today").textContent = s.today_solved; $("s_today_acc").textContent = pct(s.today_accuracy); $("s_total").textContent = s.total_solved;
+  $("s_concepts").innerHTML = s.concepts.length ? s.concepts.map(c => {
+    const acc = c.right / c.solved; const color = acc >= 0.8 ? "var(--green)" : acc >= 0.5 ? "var(--blue)" : "var(--red)";
+    return `<div class="crow"><div class="name"><span>${esc(c.concept)} <small>${esc(c.unit)}</small></span><span>${c.right}/${c.solved}</span></div>
+      <div class="track"><div style="width:${Math.round(acc * 100)}%;background:${color}"></div></div></div>`;
+  }).join("") : `<p style="color:var(--muted)">아직 푼 문제가 없어요.</p>`;
+}
+
+goHome();
+</script>
 </body>
 </html>

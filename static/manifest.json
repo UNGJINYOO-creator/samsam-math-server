@@ -1,0 +1,9 @@
+{
+  "name": "마클리",
+  "short_name": "마클리",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F2F4F6",
+  "theme_color": "#F2F4F6",
+  "icons": [{"src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]
+}
