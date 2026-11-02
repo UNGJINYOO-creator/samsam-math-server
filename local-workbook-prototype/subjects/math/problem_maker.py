@@ -64,6 +64,15 @@ PAGE_TEXT_NOTE = """
 ---
 """
 
+FREE_PROMPT = """중학교 {grade} 수학 교육과정에서 단원을 골고루 섞어서, 오늘 풀 새 문제 {n}개를 만들어줘.
+문제마다 어떤 유형인지 concepts에 같이 정리해줘.
+
+JSON 객체 하나로만 답해줘 (다른 설명 문구 없이):
+{"unit": "중학교 {grade} 오늘의 문제", "concepts": [{"name": "짧은 유형 이름", "summary": "이 유형이 무엇을 묻는지 한 문장"}], "problems": [문제, ...]}
+
+문제 하나의 형식:
+""" + PROBLEM_SCHEMA + "\n" + RULES
+
 MORE_PROMPT = """중학교 수학 문제집 "{unit}" 단원의 개념/문제 유형들이야:
 {concepts}
 {focus}
@@ -228,7 +237,10 @@ def make_first_set(page_image, page_text: str, count: int = 6) -> dict:
     if page_text.strip():
         prompt += PAGE_TEXT_NOTE.replace("{text}", page_text.strip()[:4000])
     response = generate([prompt, page_image])
-    data = _parse(response.text)
+    return _first_from(response, _parse(response.text))
+
+
+def _first_from(response, data: dict) -> dict:
     concepts = [
         {"name": str(c.get("name", "")).strip(), "summary": _plain_math(str(c.get("summary", "")))}
         for c in data.get("concepts") or [] if isinstance(c, dict) and str(c.get("name", "")).strip()
@@ -243,6 +255,12 @@ def make_first_set(page_image, page_text: str, count: int = 6) -> dict:
         "dropped": dropped,
         "solver": response.provider,
     }
+
+
+def make_free_set(grade: str, count: int = 6) -> dict:
+    """'오늘의 문제': 문제집 없이 학년 교육과정에서 골고루. 반환 형식은 make_first_set과 같다."""
+    response = generate([FREE_PROMPT.replace("{grade}", grade).replace("{n}", str(count))])
+    return _first_from(response, _parse(response.text))
 
 
 def make_more(unit: str, concepts: list[dict], avoid: list[str], count: int = 6, focus: str | None = None) -> dict:
