@@ -23,7 +23,8 @@ import urllib.request
 from subjects.math.gemini_client import GeminiError, QuotaExceededError
 
 BASE_URL = "https://integrate.api.nvidia.com/v1"
-TIMEOUT_SECONDS = 120
+TIMEOUT_SECONDS = 150  # 무료 서버는 줄이 밀리면 느리다. 이보다 오래 걸리면 포기하고 알려준다
+MAX_ANSWER_TOKENS = 1500  # 문제 1개 답(JSON)에 충분한 길이. 길게 열어두면 그만큼 느려진다
 MAX_IMAGE_SIDE = 1280
 MAX_IMAGE_BYTES = 170_000  # NVIDIA는 요청 안에 바로 넣는 이미지 크기에 제한이 있어 넉넉히 작게
 
@@ -46,6 +47,10 @@ class NvidiaRateLimitError(QuotaExceededError):
 
 class NvidiaRejectedError(GeminiError):
     """요청 자체를 거절당함(400/404/422 등). 모델이 이미지를 안 받거나 없는 모델일 때."""
+
+
+class NvidiaTimeoutError(GeminiError):
+    """NVIDIA가 제한 시간 안에 답을 주지 않음 (무료 서버가 붐비거나 모델이 느림)."""
 
 
 class NvidiaResponse:
@@ -82,7 +87,11 @@ def _request(path: str, payload: dict | None = None) -> dict:
         if 400 <= e.code < 500:
             raise NvidiaRejectedError(f"NVIDIA가 요청을 거절했어요 ({e.code}): {body}") from e
         raise GeminiError(f"NVIDIA 서버 오류 {e.code}: {body}") from e
+    except TimeoutError as e:  # 응답을 기다리다 시간 초과 (socket.timeout도 여기에 해당)
+        raise NvidiaTimeoutError(f"보조 AI(NVIDIA)가 {TIMEOUT_SECONDS}초 안에 답하지 않았어요. 서버가 붐비거나 모델이 느려요.") from e
     except urllib.error.URLError as e:
+        if isinstance(e.reason, TimeoutError):
+            raise NvidiaTimeoutError(f"보조 AI(NVIDIA)가 {TIMEOUT_SECONDS}초 안에 답하지 않았어요. 서버가 붐비거나 모델이 느려요.") from e
         raise GeminiError(f"NVIDIA 서버에 연결하지 못했어요: {e.reason}") from e
 
 
@@ -100,7 +109,7 @@ def _image_data_url(image) -> str:
         img.thumbnail((int(img.width * 0.8), int(img.height * 0.8)))
 
 
-def _chat(model: str, contents: list, max_tokens: int = 4096) -> str:
+def _chat(model: str, contents: list, max_tokens: int = MAX_ANSWER_TOKENS) -> str:
     parts = []
     for item in contents:
         if isinstance(item, str):
@@ -116,9 +125,13 @@ def _chat(model: str, contents: list, max_tokens: int = 4096) -> str:
     return data["choices"][0]["message"]["content"] or ""
 
 
+def all_model_ids() -> list[str]:
+    return sorted(m["id"] for m in _request("/models").get("data", []))
+
+
 def list_vision_candidates() -> list[str]:
     """/v1/models에서 선호 목록에 걸리는 모델들을 선호 순서대로."""
-    ids = [m["id"] for m in _request("/models").get("data", [])]
+    ids = all_model_ids()
     ordered: list[str] = []
     for key in VISION_MODEL_PREFERENCE:
         for mid in sorted(ids):
@@ -135,6 +148,13 @@ def accepts_images(model: str) -> bool:
         return True
     except NvidiaRejectedError:
         return False  # 키 오류·연결 오류·사용량 제한은 그대로 올려서 원인을 정확히 보여준다
+
+
+def use_model(model: str) -> None:
+    """비교 스크립트에서 특정 모델로 바꿔 시험할 때."""
+    global _chosen_model
+    with _model_lock:
+        _chosen_model = model
 
 
 def chosen_model() -> str:

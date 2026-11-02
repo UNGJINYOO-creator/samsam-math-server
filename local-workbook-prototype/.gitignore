@@ -5,3 +5,4 @@ __pycache__/
 *_project/
 *.pdf
 ._ocr_tmp_page_*.png
+nvidia_models.txt

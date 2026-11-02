@@ -7,12 +7,15 @@
     python scripts/check_nvidia.py
 PDF는 이 폴더에서 자동으로 찾고(여러 개면 번호로 고름), 페이지는 앱에서 마지막으로 풀던 페이지를 쓴다.
 직접 정하려면: python scripts/check_nvidia.py --pdf 문제집.pdf --page 50
+특정 NVIDIA 모델로 시험하려면: python scripts/check_nvidia.py --model mistralai/모델이름
+문제를 몇 개만 시험하려면:     python scripts/check_nvidia.py --limit 3
 
 AI 사용량: Gemini 요청 1번 + NVIDIA 요청 (문제 수 + 처음 모델 찾을 때 몇 번).
 """
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -77,6 +80,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--pdf", help="문제집 PDF 파일 (생략하면 이 폴더에서 자동으로 찾음)")
     parser.add_argument("--page", type=int, help="비교할 페이지 번호 (생략하면 앱에서 마지막으로 풀던 페이지)")
+    parser.add_argument("--model", help="시험해볼 NVIDIA 모델 이름 (생략하면 자동으로 고름)")
+    parser.add_argument("--limit", type=int, default=3, help="비교할 문제 개수 (기본 3개, 무료 서버가 느려서)")
     args = parser.parse_args()
 
     if not nvidia_client.nvidia_available():
@@ -92,36 +97,72 @@ def main() -> None:
     if not paths:
         print(f"{args.page}쪽에서 문제를 찾지 못했어요. 문제가 있는 페이지로 다시 해보세요.")
         sys.exit(1)
-    print(f"{args.page}쪽 문제 {len(paths)}개를 비교합니다.\n")
+    paths = paths[: args.limit]
+    print(f"{args.page}쪽 앞쪽 문제 {len(paths)}개를 비교합니다.\n")
 
     try:
-        print("이미지를 읽을 수 있는 NVIDIA 모델 후보:", ", ".join(nvidia_client.list_vision_candidates()) or "(없음)")
-        print("사용할 모델:", nvidia_client.chosen_model(), "\n")
-        nv = solve_questions(paths, provider="nvidia")
+        ids = nvidia_client.all_model_ids()
     except GeminiError as e:
-        print("NVIDIA로 풀지 못했어요:", e)
+        print("NVIDIA 모델 목록을 받지 못했어요:", e)
+        sys.exit(1)
+    Path("nvidia_models.txt").write_text("\n".join(ids), encoding="utf-8")
+    mistral = [i for i in ids if "mistral" in i.lower()]
+    print(f"NVIDIA 모델 {len(ids)}개 (전체 목록은 nvidia_models.txt에 저장)")
+    print("  Mistral 모델:", ", ".join(mistral) or "(없음)")
+    print("  이미지를 읽을 것으로 보이는 후보:", ", ".join(nvidia_client.list_vision_candidates()) or "(없음)")
+
+    try:
+        if args.model:
+            if not nvidia_client.accepts_images(args.model):
+                print(f"\n{args.model} 은(는) 그림을 받지 않는 모델이에요. 이미지를 읽는 모델로 다시 골라주세요.")
+                sys.exit(1)
+            nvidia_client.use_model(args.model)
+        print("  이번에 시험할 모델:", nvidia_client.chosen_model(), "\n")
+    except GeminiError as e:
+        print("\nNVIDIA 모델을 준비하지 못했어요:", e)
         sys.exit(1)
 
+    nv, seconds = [], []
+    for i, path in enumerate(paths, 1):
+        print(f"  NVIDIA가 {i}/{len(paths)}번째 문제 푸는 중...", end=" ", flush=True)
+        t0 = time.time()
+        try:
+            nv.append(solve_questions([path], provider="nvidia")[0])
+            seconds.append(time.time() - t0)
+            print(f"{seconds[-1]:.0f}초")
+        except GeminiError as e:
+            nv.append(None)
+            print(f"실패 ({e})")
+
     try:
+        print("  Gemini가 같은 문제들을 푸는 중...", flush=True)
         gem = solve_questions(paths, provider="gemini")
     except QuotaExceededError as e:
-        print("Gemini는 지금 쓸 수 없어서 NVIDIA 답만 보여드려요:", e, "\n")
+        print("  Gemini는 지금 쓸 수 없어서 NVIDIA 답만 보여드려요:", e)
         gem = None
+    print()
 
     agree = 0
     for i, n in enumerate(nv):
         g = gem[i] if gem else None
-        ok = bool(g) and same_answer(g, n)
+        ok = bool(g and n) and same_answer(g, n)
         agree += ok
-        mark = "같음" if ok else ("다름" if g else "-")
-        print(f"  {i + 1}번째 문제 | Gemini: {g['answer'] if g else '-':<14} | NVIDIA: {n['answer']:<14} | {mark}")
+        mark = "같음" if ok else ("실패" if n is None else ("다름" if g else "-"))
+        print(f"  {i + 1}번째 문제 | Gemini: {g['answer'] if g else '-':<14} | NVIDIA: {n['answer'] if n else '-':<14} | {mark}")
 
+    print()
+    if seconds:
+        print(f"NVIDIA는 문제당 평균 {sum(seconds) / len(seconds):.0f}초 걸렸어요.", end=" ")
+        print("(30초 넘게 걸리면 앱에서 기다리기 답답할 수 있어요)" if sum(seconds) / len(seconds) > 30 else "")
+    failed = sum(1 for n in nv if n is None)
+    if failed:
+        print(f"{len(nv)}문제 중 {failed}개는 NVIDIA가 답하지 못했어요.")
     if gem:
-        print(f"\n{len(nv)}문제 중 {agree}개 답이 같아요.")
+        print(f"{len(nv)}문제 중 {agree}개 답이 Gemini와 같아요.")
         if agree == len(nv):
             print("보조 AI로 써도 괜찮아 보여요. 다른 페이지도 한두 번 더 확인해보세요.")
         else:
-            print("답이 다른 문제가 있어요. 책 뒤 정답과 비교해서 어느 쪽이 맞는지 확인해보세요.")
+            print("답이 다르거나 실패한 문제가 있어요. nvidia_models.txt에 있는 다른 모델 이름으로 --model 을 줘서 다시 비교해볼 수 있어요.")
 
 
 if __name__ == "__main__":
