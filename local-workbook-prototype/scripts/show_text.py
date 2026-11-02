@@ -53,7 +53,8 @@ def check_page(doc: fitz.Document, pdf: Path, page_no: int, out: list[str]) -> t
     if not questions:
         whole = doc[page_no - 1].get_text("text").strip()
         out.append("글자로 문제 번호를 못 찾았어요 (설명 쪽이거나, 스캔 이미지만 있거나, 번호 모양이 달라요).")
-        out.append(f"이 쪽 전체 글자 앞부분: {whole[:200] or '(글자 없음)'}")
+        out.append("이 쪽 전체 글자 (OCR이 어떻게 읽었는지 확인용):")
+        out.append(whole or "(글자 없음)")
         return 0, 0
 
     page = doc[page_no - 1]
