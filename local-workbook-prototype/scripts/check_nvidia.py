@@ -44,10 +44,19 @@ def pick_pdf(given: str | None) -> Path:
         sys.exit(1)
     if len(pdfs) == 1:
         return pdfs[0]
+
+    # 앱에서 풀던 문제집(저장된 위치가 있는 것)이 있으면 가장 최근 것을 자동으로 고른다
+    used = [p for p in pdfs if (p.parent / f"{p.stem}_bypage" / ".position.json").exists()]
+    if used:
+        return max(used, key=lambda p: (p.parent / f"{p.stem}_bypage" / ".position.json").stat().st_mtime)
+
     for i, p in enumerate(pdfs, 1):
         print(f"  {i}. {p.name}")
-    choice = input("비교할 문제집 번호를 입력하세요: ").strip()
-    return pdfs[int(choice) - 1]
+    while True:
+        choice = input(f"위 목록에서 문제집 번호(1~{len(pdfs)})를 입력하세요: ").strip()
+        if choice.isdigit() and 1 <= int(choice) <= len(pdfs):
+            return pdfs[int(choice) - 1]
+        print(f"  1부터 {len(pdfs)} 사이의 숫자로 입력해주세요. (페이지 번호는 다음에 따로 물어봐요)")
 
 
 def pick_page(given: int | None, project_dir: Path) -> int:
@@ -57,7 +66,11 @@ def pick_page(given: int | None, project_dir: Path) -> int:
     pos = project_dir / ".position.json"
     if pos.exists():
         return int(json.loads(pos.read_text(encoding="utf-8"))["page"])
-    return int(input("비교할 페이지 번호를 입력하세요 (문제가 있는 페이지): ").strip())
+    while True:
+        choice = input("비교할 페이지 번호를 입력하세요 (문제가 있는 페이지): ").strip()
+        if choice.isdigit() and int(choice) >= 1:
+            return int(choice)
+        print("  페이지 번호를 숫자로 입력해주세요.")
 
 
 def main() -> None:
