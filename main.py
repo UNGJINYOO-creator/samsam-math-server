@@ -22,7 +22,9 @@ from pydantic import BaseModel
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "local-workbook-prototype"))
 
+import bank_builder  # noqa: E402
 import practice_engine as engine  # noqa: E402
+import updater  # noqa: E402
 from subjects.math.gemini_client import GeminiError, QuotaExceededError, quota_blocked_seconds  # noqa: E402
 from subjects.math.handwriting import explain_mistake  # noqa: E402
 from subjects.math.nvidia_client import nvidia_available  # noqa: E402
@@ -33,6 +35,11 @@ app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
 
 @app.exception_handler(engine.PracticeError)
 def _practice_error(_req, e: engine.PracticeError):
+    return JSONResponse({"error": str(e)}, status_code=400)
+
+
+@app.exception_handler(updater.UpdateError)
+def _update_error(_req, e: updater.UpdateError):
     return JSONResponse({"error": str(e)}, status_code=400)
 
 
@@ -199,3 +206,44 @@ def handwriting(set_id: str, req: Handwriting):
 @app.get("/api/stats")
 def stats():
     return engine.stats()
+
+
+# ───────────────────────── ⚙ 관리: 문제 은행 채우기 · 앱 업데이트 ─────────────────────────
+
+
+class BankRange(BaseModel):
+    book: str
+    first: int
+    last: int
+
+
+@app.get("/api/admin/bank")
+def bank_status():
+    return bank_builder.status()
+
+
+@app.post("/api/admin/bank/start")
+def bank_start(req: BankRange):
+    return bank_builder.start(req.book, req.first, req.last)
+
+
+@app.post("/api/admin/bank/stop")
+def bank_stop():
+    return bank_builder.stop()
+
+
+@app.get("/api/admin/version")
+def app_version():
+    return updater.version()
+
+
+@app.post("/api/admin/update/check")
+def update_check():
+    return updater.check()
+
+
+@app.post("/api/admin/update/apply")
+def update_apply():
+    if bank_builder.status().get("running"):
+        bank_builder.stop()  # 다시 켜지면 문제 은행은 이어서 만들 수 있다
+    return updater.apply()

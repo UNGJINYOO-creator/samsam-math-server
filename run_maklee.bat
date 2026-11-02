@@ -12,10 +12,6 @@ pause
 exit /b
 
 :start
-python -c "import fastapi, uvicorn" 2>nul
-if errorlevel 1 python -m pip install -r requirements.txt
-echo 마클리를 켭니다. 아래에 나오는 태블릿 접속 주소로 들어가세요. 이 창은 닫지 마세요.
-python -m uvicorn main:app --host 0.0.0.0 --port 8000
+python maklee.py
 echo.
-echo 마클리가 꺼졌습니다. 위에 오류 글자가 있으면 이 창을 캡처해서 보내주세요.
 pause

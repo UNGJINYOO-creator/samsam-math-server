@@ -10,16 +10,22 @@
    setx GEMINI_API_KEY "Gemini 키"
    setx NVIDIA_API_KEY "nvapi-..."      (선택: Gemini 무료 한도에 걸렸을 때 보조 AI)
    ```
-2. `run_maklee.bat` 더블클릭 (처음 한 번은 필요한 프로그램을 자동 설치)
+2. `run_maklee.bat` 더블클릭 (처음 한 번은 필요한 프로그램을 자동 설치). 이 파일 하나만 켜두면 된다.
 3. 검은 창에 나오는 **태블릿에서 접속: http://192.168.x.x:8000** 주소를 태블릿 크롬에 입력
    - 태블릿 크롬 메뉴 → "홈 화면에 추가"를 누르면 앱처럼 아이콘으로 열 수 있다.
    - 이 PC에서는 http://localhost:8000
 
 문제집 PDF는 `local-workbook-prototype` 폴더에 넣는다.
 
-## 문제 은행 만들기 (먼저 한 번, 밤에 PC가 혼자)
+## ⚙ 관리 화면 (앱 안에서, cmd 없이)
 
-`run_bank.bat` 더블클릭 → 문제집과 쪽 범위(예: 14~60)를 고르면 한 쪽씩 넘기면서 Gemini가
+- **문제 은행 채우기**: 문제집과 쪽 범위를 고르고 "만들기 시작" → 진행 상황·남은 시간·한도 대기를 태블릿에서 본다. "멈추기"로 언제든 멈추고, 다시 시작하면 이어서 한다.
+- **앱 업데이트**: "업데이트 확인" → 새 버전이 있으면 "지금 업데이트하기" → 받아와서(git pull) 마클리가 스스로 다시 켜진다.
+  (다시 켜기는 `maklee.py`가 한다. PC에서 직접 고친 파일이 있으면 업데이트를 멈추고 알려준다.)
+
+## 문제 은행 만들기 (관리 화면 또는 run_bank.bat)
+
+관리 화면이나 `run_bank.bat`에서 문제집과 쪽 범위(예: 14~60)를 고르면 한 쪽씩 넘기면서 Gemini가
 쪽마다 새 문제 8개(쉬움3·보통3·어려움2)와 정답·힌트·빈칸 풀이를 만들어 쌓아둔다.
 
 - 문제가 없는 쪽(목차·개념 설명)은 PDF 글자로 먼저 걸러서 AI를 안 쓴다.
@@ -44,7 +50,10 @@
 
 ## 구조
 
+- `maklee.py` — 실행기 (run_maklee.bat). 서버를 켜고, 앱 안 업데이트 뒤 새 버전으로 다시 켠다.
 - `main.py` — 웹 서버 (FastAPI). 화면은 `static/index.html` 한 장.
+- `updater.py` — 앱 안 업데이트 (git fetch / pull)
+- `local-workbook-prototype/bank_builder.py` — 문제 은행 만들기 작업 (관리 화면·run_bank.bat 공용)
 - `local-workbook-prototype/practice_engine.py` — 문제 은행·세트 저장, 채점 기록, 복습, 섞어 풀기
 - `local-workbook-prototype/scripts/build_bank.py` — 문제 은행 만들기 (`run_bank.bat`)
 - `local-workbook-prototype/subjects/math/problem_maker.py` — AI 문제 생성 + 정답 검산
