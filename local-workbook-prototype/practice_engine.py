@@ -36,9 +36,11 @@ DATA_DIR = BASE_DIR / "practice_data"
 SETS_DIR = DATA_DIR / "sets"
 PAGES_DIR = DATA_DIR / "pages"
 LOG_PATH = DATA_DIR / "log.csv"
+BANK_DIR = DATA_DIR / "bank"  # 문제 은행: bank/<책>/pNNN.json (scripts/build_bank.py가 미리 만들어 둔다)
 LOG_FIELDS = ["time", "set_id", "kind", "book", "page", "unit", "concept", "problem_id", "type", "answer", "ok", "attempt"]
 
-FIRST_COUNT = 6  # 쪽을 처음 열 때 만드는 문제 수
+FIRST_COUNT = 6  # 은행에 없는 쪽을 열 때 AI가 그 자리에서 만드는 문제 수
+MIX_COUNT = 6  # 섞어 풀기 문제 수
 MORE_COUNT = 6  # "문제 더 만들기"마다 만드는 문제 수
 SAME_TYPE_COUNT = 2  # "같은 유형 한 문제 더"를 눌렀는데 남은 같은 유형 문제가 없을 때 만드는 수
 PREFETCH_WHEN_LEFT = 2  # 안 푼 문제가 이만큼 이하로 남으면 뒤에서 미리 더 만든다
@@ -65,7 +67,7 @@ def list_books() -> list[dict]:
         except Exception:
             continue
         last = _last_page(pdf.stem)
-        books.append({"name": pdf.name, "pages": pages, "last_page": last})
+        books.append({"name": pdf.name, "pages": pages, "last_page": last, "bank": bank_summary(pdf.name)})
     return books
 
 
@@ -87,6 +89,90 @@ def page_image_path(book: str, page: int) -> Path:
 def _page_text(book: str, page: int) -> str:
     with fitz.open(str(_book_path(book))) as doc:
         return doc[page - 1].get_text("text")
+
+
+# ───────────────────────── 문제 은행 ─────────────────────────
+
+
+def _bank_book_dir(book: str) -> Path:
+    return BANK_DIR / _safe(Path(book).stem)
+
+
+def bank_page(book: str, page: int) -> dict | None:
+    path = _bank_book_dir(book) / f"p{page:03d}.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+def save_bank_page(book: str, page: int, made: dict | None, status: str, note: str = "") -> dict:
+    """status: ok(문제 있음) / skip(문제 없는 쪽) / error(실패, 다음에 다시 시도)."""
+    stem = _safe(Path(book).stem)
+    data = {"book": book, "page": page, "status": status, "note": note,
+            "made_at": datetime.now().isoformat(timespec="seconds"),
+            "unit": "", "concepts": [], "problems": [], "dropped": [], "solver": ""}
+    if made:
+        data.update({k: made[k] for k in ("unit", "concepts", "dropped", "solver")})
+        data["problems"] = [{**p, "unit": made["unit"], "book": book, "page": page, "bank_id": f"bk_{stem}_p{page:03d}_{i + 1}"}
+                            for i, p in enumerate(made["problems"])]
+    path = _bank_book_dir(book) / f"p{page:03d}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(path)
+    return data
+
+
+def bank_pages(book: str | None = None) -> list[dict]:
+    dirs = [_bank_book_dir(book)] if book else (sorted(BANK_DIR.iterdir()) if BANK_DIR.exists() else [])
+    out = []
+    for d in dirs:
+        for f in sorted(d.glob("p*.json")) if d.exists() else []:
+            out.append(json.loads(f.read_text(encoding="utf-8")))
+    return out
+
+
+def _ranges(pages: list[int]) -> str:
+    parts, start = [], None
+    for i, p in enumerate(pages):
+        if start is None:
+            start = p
+        if i + 1 == len(pages) or pages[i + 1] != p + 1:
+            parts.append(f"{start}" if start == p else f"{start}~{p}")
+            start = None
+    return ", ".join(parts)
+
+
+def bank_summary(book: str) -> dict:
+    pages = bank_pages(book)
+    ready = sorted(p["page"] for p in pages if p["status"] == "ok")
+    done = sorted(p["page"] for p in pages if p["status"] in ("ok", "skip"))
+    return {
+        "ready_pages": ready,
+        "ranges": _ranges(ready),
+        "problems": sum(len(p["problems"]) for p in pages if p["status"] == "ok"),
+        "last_done": done[-1] if done else None,
+        "skipped": sorted(p["page"] for p in pages if p["status"] == "skip"),
+    }
+
+
+def _used_bank_ids() -> set[str]:
+    return {p["bank_id"] for s in all_sets() for p in s["problems"] if p.get("bank_id")}
+
+
+def _bank_problems(concept: str | None = None, book: str | None = None) -> list[dict]:
+    """아직 어느 세트에도 안 쓴 은행 문제들."""
+    used = _used_bank_ids()
+    out = []
+    for page in bank_pages(book):
+        if page["status"] != "ok":
+            continue
+        for p in page["problems"]:
+            if p["bank_id"] not in used and (concept is None or p["concept"] == concept):
+                out.append(p)
+    return out
+
+
+def next_ready_page(book: str, page: int) -> int | None:
+    return next((p for p in bank_summary(book)["ready_pages"] if p > page), None)
 
 
 # ───────────────────────── 세트 저장소 ─────────────────────────
@@ -132,7 +218,8 @@ def _add_problems(data: dict, problems: list[dict], solver: str, after: int | No
     new = []
     for p in problems:
         data["made"] = data.get("made", 0) + 1
-        new.append({**p, "id": f"{data['id']}-{data['made']}", "result": None, "solver": solver})
+        new.append({"unit": data["unit"], **p, "id": f"{data['id']}-{data['made']}", "result": None,
+                    "solver": p.get("solver") or solver})
     if after is None:
         data["problems"].extend(new)
     else:
@@ -150,11 +237,20 @@ def _new_set(set_id: str, kind: str, title: str, made: dict, **extra) -> dict:
 
 
 def open_book_page(book: str, page: int) -> dict:
-    """그 쪽 세트가 있으면 그대로, 없으면 AI가 쪽을 읽고 새로 만든다 (AI 요청 1번, 10~40초)."""
+    """그 쪽 세트가 있으면 그대로, 은행에 있으면 바로 꺼내고, 둘 다 없으면 AI가 지금 만든다 (10~40초)."""
     set_id = book_set_id(book, page)
     with _lock:
         data = _read(set_id)
     if data:
+        return data
+    banked = bank_page(book, page)
+    if banked and banked["status"] == "skip":
+        raise PracticeError(f"{page}쪽은 풀 문제가 없는 쪽이라 건너뛰었어요. 다른 쪽을 골라주세요.")
+    if banked and banked["status"] == "ok" and banked["problems"]:
+        made = {"unit": banked["unit"], "concepts": banked["concepts"], "problems": banked["problems"], "solver": banked["solver"]}
+        data = _new_set(set_id, "book", f"{page}쪽 · {banked['unit']}", made, book=book, page=page)
+        with _lock:
+            _write(data)
         return data
     return _run_once(f"new:{set_id}", lambda: _make_book_set(set_id, book, page))
 
@@ -180,6 +276,32 @@ def new_free_set(grade: str) -> dict:
     made = make_free_set(grade, FIRST_COUNT)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     data = _new_set(f"free_{stamp}", "free", f"오늘의 문제 · {grade}", made, grade=grade)
+    with _lock:
+        _write(data)
+    return data
+
+
+def new_mix_set(book: str | None = None) -> dict:
+    """은행에서 아직 안 푼 문제를 골고루 섞어서 (AI 없이 바로). 이미 공부한 쪽 문제를 먼저."""
+    import random
+
+    pool = _bank_problems(book=book)
+    if not pool:
+        raise PracticeError("문제 은행이 비어 있어요. run_bank.bat으로 먼저 문제 은행을 만들어주세요.")
+    studied = {(s.get("book"), s.get("page")) for s in all_sets() if s["kind"] == "book"}
+    seen = [p for p in pool if (p["book"], p["page"]) in studied]
+    random.shuffle(seen)
+    random.shuffle(pool)
+    picked, ids = [], set()
+    for p in seen + pool:
+        if p["bank_id"] not in ids and len(picked) < MIX_COUNT:
+            picked.append(p)
+            ids.add(p["bank_id"])
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    title = f"섞어 풀기 · {Path(book).stem}" if book else "섞어 풀기"
+    concepts = list({p["concept"]: {"name": p["concept"], "summary": p.get("unit", "")} for p in picked}.values())
+    data = _new_set(f"mix_{stamp}", "mix", title,
+                    {"unit": "섞어 풀기", "concepts": concepts, "problems": picked, "solver": "bank"}, book=book)
     with _lock:
         _write(data)
     return data
@@ -271,6 +393,16 @@ def same_type_next(set_id: str, problem_id: str) -> str:
             data["problems"].insert(idx + 1, data["problems"].pop(later))
             _write(data)
             return data["problems"][idx + 1]["id"]
+    book, page = data.get("book"), data.get("page") or 0
+    candidates = _bank_problems(concept, book) or _bank_problems(concept)
+    if candidates:
+        pick = min(candidates, key=lambda p: (p.get("book") != book, abs((p.get("page") or 0) - page)))
+        with _lock:
+            data = _read(set_id)
+            idx = next(i for i, p in enumerate(data["problems"]) if p["id"] == problem_id)
+            new_id = _add_problems(data, [pick], pick.get("solver", "bank"), idx)[0]
+            _write(data)
+        return new_id
     return add_more(set_id, focus=concept, count=SAME_TYPE_COUNT, after=idx)[0]
 
 
@@ -286,7 +418,7 @@ def find_problem(data: dict, problem_id: str) -> dict:
 
 def public_problem(p: dict) -> dict:
     """화면에 보내는 문제 (정답·풀이는 빼고. 채점은 서버에서 한다)."""
-    return {k: p[k] for k in ("id", "concept", "type", "question", "choices", "result")}
+    return {**{k: p[k] for k in ("id", "concept", "type", "question", "choices", "result")}, "level": p.get("level", "")}
 
 
 def reveal(p: dict) -> dict:
@@ -317,7 +449,6 @@ def grade(set_id: str, problem_id: str, answer: str, attempt: int) -> dict:
     _log(data, p, answer, ok, attempt)
     if ok or attempt >= 2:
         _set_result(set_id, problem_id, "right" if ok and attempt == 1 else ("retry_right" if ok else "wrong"))
-        prefetch_if_low(set_id)
     if ok:
         return {"ok": True, **reveal(p)}
     if attempt < 2:
@@ -351,7 +482,8 @@ def _log(data: dict, p: dict, answer: str, ok: bool, attempt: int) -> None:
                 w.writeheader()
             w.writerow({
                 "time": datetime.now().isoformat(timespec="seconds"), "set_id": data["id"], "kind": data["kind"],
-                "book": data.get("book", ""), "page": data.get("page", ""), "unit": data["unit"],
+                "book": p.get("book") or data.get("book", ""), "page": p.get("page") or data.get("page", ""),
+                "unit": p.get("unit") or data["unit"],
                 "concept": p["concept"], "problem_id": p["id"], "type": p["type"], "answer": answer,
                 "ok": int(ok), "attempt": attempt,
             })
@@ -392,6 +524,18 @@ def new_review_set() -> dict:
     weak = weak_concepts()
     if not weak:
         raise PracticeError("아직 틀린 유형이 없어요. 문제를 풀다 보면 여기에 모여요.")
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    picked = []
+    for w in weak:
+        same = [p for p in _bank_problems(w["concept"]) if p.get("unit") == w["unit"]] or _bank_problems(w["concept"])
+        picked += same[:2]
+    if len(picked) >= 3:  # 은행에 충분히 있으면 바로
+        concepts = [{"name": w["concept"], "summary": w["unit"]} for w in weak]
+        data = _new_set(f"review_{stamp}", "review", "틀린 유형 복습",
+                        {"unit": "틀린 유형 복습", "concepts": concepts, "problems": picked, "solver": "bank"})
+        with _lock:
+            _write(data)
+        return data
     summaries = {}
     for s in all_sets():
         for c in s.get("concepts", []):
@@ -399,7 +543,9 @@ def new_review_set() -> dict:
     concepts = [{"name": w["concept"], "summary": f"{w['unit']} 단원. {summaries.get((w['unit'], w['concept']), '')}"}
                 for w in weak]
     made = make_more("틀린 유형 복습", concepts, [], max(MORE_COUNT, 2 * len(concepts)))
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    unit_of = {w["concept"]: w["unit"] for w in weak}
+    for p in made["problems"]:
+        p["unit"] = unit_of.get(p["concept"], weak[0]["unit"])
     data = _new_set(f"review_{stamp}", "review", "틀린 유형 복습",
                     {**made, "unit": "틀린 유형 복습", "concepts": concepts})
     with _lock:

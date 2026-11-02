@@ -100,6 +100,7 @@ def _set_view(data: dict) -> dict:
         "book": data.get("book"), "page": data.get("page"),
         "concepts": data["concepts"],
         "problems": [engine.public_problem(p) for p in data["problems"]],
+        "next_ready_page": engine.next_ready_page(data["book"], data["page"]) if data["kind"] == "book" else None,
     }
 
 
@@ -113,6 +114,15 @@ def new_free(req: Grade):
     return _set_view(engine.new_free_set(req.grade))
 
 
+class Mix(BaseModel):
+    book: str | None = None
+
+
+@app.post("/api/sets/mix")
+def new_mix(req: Mix):
+    return _set_view(engine.new_mix_set(req.book))
+
+
 @app.post("/api/sets/review")
 def new_review():
     return _set_view(engine.new_review_set())
@@ -123,18 +133,10 @@ def get_set(set_id: str):
     return _set_view(engine.get_set(set_id))
 
 
-class More(BaseModel):
-    wait_prefetch: bool = True
-
-
 @app.post("/api/sets/{set_id}/more")
-def more(set_id: str, req: More):
-    """문제 더: 뒤에서 미리 만들던 게 있으면 그걸 기다리고, 그래도 안 푼 문제가 없으면 새로 만든다."""
-    if req.wait_prefetch:
-        engine.wait_for_more(set_id)
-    data = engine.get_set(set_id)
-    if not any(p["result"] is None for p in data["problems"]):
-        engine.add_more(set_id)
+def more(set_id: str):
+    """AI로 이 세트에 문제 더 만들기 (은행 밖, 20~40초). 은행에 있는 문제는 다음 쪽/섞어 풀기로 바로 푼다."""
+    engine.add_more(set_id)
     return _set_view(engine.get_set(set_id))
 
 

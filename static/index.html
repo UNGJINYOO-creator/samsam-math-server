@@ -56,6 +56,17 @@ input, select { font: inherit; color: var(--text); }
 .recent { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); font-size: 16px; }
 .recent:first-of-type { border-top: none; }
 .recent small { color: var(--muted); }
+.bankinfo { background: #F9FAFB; border-radius: 12px; padding: 10px 12px; font-size: 14px; color: var(--sub); margin-bottom: 10px; }
+.bankinfo b { color: var(--text); }
+.badge { display: inline-block; border-radius: 999px; padding: 4px 10px; font-size: 14px; font-weight: 700; }
+.badge.ready { background: var(--green-weak); color: var(--green); }
+.badge.wait { background: var(--yellow-weak); color: var(--yellow); }
+.badge.skip { background: #F2F4F6; color: var(--muted); }
+.chip.level { background: #F2F4F6; color: var(--sub); margin-left: 4px; }
+.enddone { text-align: center; padding: 30px 0 10px; }
+.enddone div { font-size: 44px; }
+.enddone b { display: block; font-size: 21px; margin-top: 8px; }
+.enddone span { color: var(--sub); }
 .notice { background: var(--yellow-weak); color: var(--yellow); border-radius: 14px; padding: 12px 14px; font-size: 15px; margin-bottom: 12px; }
 
 /* 풀이 화면 (시안 B: 왼쪽 문제 / 오른쪽 필기) */
@@ -139,28 +150,34 @@ input, select { font: inherit; color: var(--text); }
 
   <div class="card">
     <h3>📖 문제집으로 풀기</h3>
-    <p class="desc">쪽을 고르면 AI가 그 쪽 개념을 읽고 숫자를 바꾼 새 문제를 만들어요.</p>
+    <p class="desc">쪽을 고르면 그 쪽 개념으로 숫자를 바꾼 새 문제를 풀어요. 문제 은행에 있는 쪽은 바로 시작해요.</p>
     <div id="nobook" class="notice hidden">local-workbook-prototype 폴더에 문제집 PDF를 넣고 새로고침해주세요.</div>
     <div id="bookbox">
       <div class="field"><select id="book" onchange="onBookChange()"></select></div>
+      <div class="bankinfo" id="bankinfo"></div>
       <div class="field pageinput">
         <button onclick="stepPage(-1)">−</button>
         <input id="page" type="number" min="1" inputmode="numeric" onchange="loadPreview()">
         <button onclick="stepPage(1)">+</button>
         <span id="pagecount" style="color:var(--muted)"></span>
+        <span id="pagebadge"></span>
       </div>
       <img id="preview" class="preview" alt="쪽 미리보기">
-      <button class="btn" onclick="openBookPage()">이 쪽 개념으로 문제 만들기</button>
+      <button class="btn" id="openbtn" onclick="openBookPage()">바로 풀기</button>
     </div>
   </div>
 
   <div class="card">
-    <h3>✨ 오늘의 문제</h3>
-    <p class="desc">문제집 없이, 학년 교육과정에서 골고루 6문제.</p>
-    <div class="seg" id="grade">
-      <button onclick="pickGrade(this)">중1</button><button class="on" onclick="pickGrade(this)">중2</button><button onclick="pickGrade(this)">중3</button>
-    </div>
-    <button class="btn" onclick="openFree()">오늘의 문제 받기</button>
+    <h3>🔀 섞어 풀기</h3>
+    <p class="desc">문제 은행에서 안 푼 문제를 골고루 6개. 공부한 쪽 문제부터 섞어요.</p>
+    <button class="btn" id="mixbtn" onclick="openMix()">섞어서 바로 풀기</button>
+    <details style="margin-top:14px">
+      <summary style="color:var(--sub);font-size:15px;cursor:pointer">문제집 없이 학년별 오늘의 문제 (AI가 지금 만들어서 30초쯤)</summary>
+      <div class="seg" id="grade" style="margin-top:10px">
+        <button onclick="pickGrade(this)">중1</button><button class="on" onclick="pickGrade(this)">중2</button><button onclick="pickGrade(this)">중3</button>
+      </div>
+      <button class="btn gray" onclick="openFree()">오늘의 문제 받기</button>
+    </details>
   </div>
 
   <div class="card">
@@ -185,7 +202,7 @@ input, select { font: inherit; color: var(--text); }
       <span id="count"></span>
     </div>
     <div class="bar"><div id="barfill"></div></div>
-    <div><span class="chip" id="concept"></span></div>
+    <div><span class="chip" id="concept"></span><span class="chip level" id="level"></span></div>
     <div class="question" id="question"></div>
     <div class="choices" id="choices"></div>
     <input class="short hidden" id="short" placeholder="답을 입력하세요" autocomplete="off" oninput="onShortInput()">
@@ -286,6 +303,7 @@ async function goHome() {
   $("weak").innerHTML = home.weak.length ? home.weak.map(w => `<span class="chip red">${esc(w.concept)}</span>`).join("")
     : `<span style="color:var(--muted);font-size:15px">아직 틀린 유형이 없어요.</span>`;
   $("reviewbtn").disabled = !home.weak.length;
+  $("mixbtn").disabled = !home.books.some(b => b.bank.problems > 0);
 
   $("recentcard").classList.toggle("hidden", !home.recent.length);
   $("recent").innerHTML = home.recent.map(r => `<div class="recent"><div>${esc(r.title)}<br><small>${r.total - r.left}/${r.total} 풀었어요</small></div>
@@ -295,8 +313,25 @@ function currentBook() { return home.books.find(b => b.name === $("book").value)
 function onBookChange(keepPage) {
   const b = currentBook(); if (!b) return;
   $("page").max = b.pages; $("pagecount").textContent = `/ ${b.pages}쪽`;
-  if (!keepPage || !$("page").value) $("page").value = b.last_page || Math.min(14, b.pages);
+  if (!keepPage || !$("page").value) $("page").value = b.last_page || b.bank.ready_pages[0] || Math.min(14, b.pages);
+  $("bankinfo").innerHTML = b.bank.problems
+    ? `문제 은행: <b>${esc(b.bank.ranges)}쪽</b> 준비됨 · 문제 ${b.bank.problems}개`
+    : `문제 은행이 아직 비어 있어요. PC에서 <b>run_bank.bat</b>을 실행하면 미리 만들어 둬요.`;
   loadPreview();
+}
+function pageState(b, p) {
+  if (b.bank.ready_pages.includes(p)) return "ready";
+  if (b.bank.skipped.includes(p)) return "skip";
+  return "wait";
+}
+function updateBadge() {
+  const b = currentBook(); const p = parseInt($("page").value);
+  if (!b || !(p >= 1)) return;
+  const st = pageState(b, p);
+  $("pagebadge").innerHTML = {ready: `<span class="badge ready">바로 풀 수 있어요</span>`,
+    skip: `<span class="badge skip">문제 없는 쪽</span>`, wait: `<span class="badge wait">은행에 아직 없음</span>`}[st];
+  $("openbtn").textContent = st === "wait" ? "AI로 지금 만들어서 풀기 (30초쯤)" : "바로 풀기";
+  $("openbtn").disabled = st === "skip";
 }
 function stepPage(d) {
   const b = currentBook(); if (!b) return;
@@ -310,13 +345,22 @@ function loadPreview() {
     const b = currentBook(); const p = parseInt($("page").value);
     if (b && p >= 1 && p <= b.pages) $("preview").src = `/api/books/${encodeURIComponent(b.name)}/page/${p}.png`;
   }, 250);
+  updateBadge();
 }
 function pickGrade(btn) { for (const b of $("grade").children) b.classList.toggle("on", b === btn); }
 
 async function openBookPage() {
   const b = currentBook(); const page = parseInt($("page").value);
   if (!b || !(page >= 1 && page <= b.pages)) return alert("쪽 번호를 확인해주세요.");
-  const data = await withLoading(`AI가 ${page}쪽을 읽고 새 문제를 만드는 중이에요`, () => api("/api/sets/book", {book: b.name, page}));
+  openPage(b.name, page, pageState(b, page) === "ready");
+}
+async function openPage(book, page, ready) {
+  const msg = ready ? "불러오는 중" : `AI가 ${page}쪽을 읽고 새 문제를 만드는 중이에요`;
+  const data = await withLoading(msg, () => api("/api/sets/book", {book, page}));
+  if (data) startSet(data);
+}
+async function openMix() {
+  const data = await withLoading("불러오는 중", () => api("/api/sets/mix", {}));
   if (data) startSet(data);
 }
 async function openFree() {
@@ -351,6 +395,7 @@ function renderProblem() {
   $("count").innerHTML = `<b>${idx + 1}</b> / ${S.problems.length}`;
   $("barfill").style.width = `${Math.round(100 * done / S.problems.length)}%`;
   $("concept").textContent = p.concept;
+  $("level").textContent = p.level || ""; $("level").classList.toggle("hidden", !p.level);
   $("question").textContent = big(p.question); math($("question"));
   $("feedback").innerHTML = ""; $("cloze").innerHTML = "";
   const isMC = p.type === "multiple_choice";
@@ -462,12 +507,29 @@ async function sameType() {
 async function nextProblem() {
   let n = S.problems.findIndex((p, i) => i > idx && !p.result);
   if (n < 0) n = S.problems.findIndex(p => !p.result);
-  if (n < 0) {
-    const r = await withLoading("문제를 더 만드는 중이에요", () => api(`/api/sets/${S.id}/more`, {wait_prefetch: true}));
-    if (!r) return;
-    S = r; n = S.problems.findIndex(p => !p.result);
-    if (n < 0) return alert("새 문제를 만들지 못했어요. 다시 시도해주세요.");
-  }
+  if (n < 0) return renderEnd();
+  idx = n; renderProblem();
+}
+function renderEnd() {
+  const right = S.problems.filter(p => p.result === "right").length;
+  $("count").textContent = ""; $("barfill").style.width = "100%";
+  $("concept").textContent = "다 풀었어요"; $("level").classList.add("hidden");
+  $("question").innerHTML = `<div class="enddone"><div>🎉</div><b>${S.problems.length}문제를 다 풀었어요</b>
+    <span>한 번에 맞힌 문제 ${right}개</span></div>`;
+  $("choices").innerHTML = ""; $("short").classList.add("hidden"); $("feedback").innerHTML = ""; $("cloze").innerHTML = "";
+  stage = "done";
+  const nextPage = S.next_ready_page;
+  renderActions(`
+    ${nextPage ? `<button class="btn" onclick="openPage(S.book, ${nextPage}, true)">다음 쪽 (${nextPage}쪽) 바로 풀기</button>` : ""}
+    ${S.kind !== "book" ? `<button class="btn" onclick="openMix()">섞어서 6문제 더</button>` : ""}
+    <button class="btn gray" onclick="moreAI()">AI로 이 개념 문제 더 만들기 (30초쯤)</button>
+    <button class="btn gray" onclick="goHome()">홈으로</button>`);
+}
+async function moreAI() {
+  const r = await withLoading("문제를 더 만드는 중이에요", () => api(`/api/sets/${S.id}/more`, {}));
+  if (!r) return;
+  S = r; const n = S.problems.findIndex(p => !p.result);
+  if (n < 0) return alert("새 문제를 만들지 못했어요. 다시 시도해주세요.");
   idx = n; renderProblem();
 }
 

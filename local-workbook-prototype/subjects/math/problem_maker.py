@@ -25,10 +25,12 @@ from subjects.math.gemini_client import GeminiError, generate
 ProblemMakerError = GeminiError
 
 CHOICE_MARKS = "①②③④⑤"
+LEVELS = ("쉬움", "보통", "어려움")
 
 PROBLEM_SCHEMA = """{
   "concept": "위 concepts의 name 중 하나를 글자 그대로",
   "type": "multiple_choice 또는 short_answer",
+  "level": "쉬움 또는 보통 또는 어려움",
   "question": "문제 문장. 수식은 $...$ 안에 LaTeX로 써줘 (예: $\\\\frac{7}{250}$, $2^2 \\\\times 5$, $0.\\\\dot{4}0\\\\dot{7}$). 객관식 보기는 여기 쓰지 말고 choices에",
   "choices": ["객관식이면 보기 5개 (원문자 빼고, 수식은 $...$ LaTeX). 주관식이면 빈 배열 []"],
   "answer": "정답. 객관식이면 ①~⑤ 중 하나만, 주관식이면 학생이 키보드로 칠 수 있는 형태 (예: 3, -2, 3/8, x=4, 0.25). LaTeX 금지",
@@ -63,6 +65,25 @@ PAGE_TEXT_NOTE = """
 {text}
 ---
 """
+
+# 문제 은행 만들기(build_bank.py)용: 쪽마다 한 번. 문제가 없는 쪽이면 빈 배열로 답하게 한다.
+BANK_PROMPT = """이 이미지는 중학교 수학 문제집의 한 쪽이야.
+먼저 이 쪽에 학생이 풀 문제가 있는지 봐줘. 표지·목차·개념 설명만 있는 쪽이면
+{"unit": "단원 이름", "has_problems": false, "concepts": [], "problems": []} 로만 답해.
+
+문제가 있는 쪽이면:
+1) 이 쪽이 다루는 단원 이름과, 핵심 개념/문제 유형을 2~5개 뽑아줘.
+{known}
+2) 그 개념들로 새 문제 {n}개를 만들어줘: 쉬움 {easy}개, 보통 {normal}개, 어려움 {hard}개. 유형마다 골고루.
+
+JSON 객체 하나로만 답해줘 (다른 설명 문구 없이):
+{"unit": "단원 이름", "has_problems": true, "concepts": [{"name": "짧은 유형 이름", "summary": "이 유형이 무엇을 묻는지 한 문장"}], "problems": [문제, ...]}
+
+문제 하나의 형식:
+""" + PROBLEM_SCHEMA + "\n" + RULES
+
+KNOWN_CONCEPTS_NOTE = """   같은 단원 앞쪽에서 이미 쓴 유형 이름들이야. 같은 유형이면 이름을 글자 그대로 다시 써줘 (같은 유형끼리 모아서 복습하려고):
+{names}"""
 
 FREE_PROMPT = """중학교 {grade} 수학 교육과정에서 단원을 골고루 섞어서, 오늘 풀 새 문제 {n}개를 만들어줘.
 문제마다 어떤 유형인지 concepts에 같이 정리해줘.
@@ -187,6 +208,7 @@ def _normalize_problem(d: dict) -> dict:
     return {
         "concept": str(d.get("concept", "")).strip(),
         "type": qtype,
+        "level": d.get("level") if d.get("level") in LEVELS else "보통",
         "question": _keep_latex(d.get("question")),
         "choices": choices,
         "answer": answer,
@@ -251,6 +273,39 @@ def _first_from(response, data: dict) -> dict:
     return {
         "unit": str(data.get("unit", "")).strip() or "이 쪽",
         "concepts": concepts or [{"name": "이 쪽 개념", "summary": ""}],
+        "problems": problems,
+        "dropped": dropped,
+        "solver": response.provider,
+    }
+
+
+def make_bank_page(page_image, page_text: str, known_concepts: list[str], count: int = 8) -> dict:
+    """문제 은행 만들기: 한 쪽 -> 개념 + 새 문제 count개 (쉬움·보통·어려움 섞어서).
+    문제가 없는 쪽이면 problems가 빈 목록. 반환: {"unit","has_problems","concepts","problems","dropped","solver"}"""
+    easy = round(count * 3 / 8)
+    hard = max(1, round(count * 2 / 8))
+    normal = max(0, count - easy - hard)
+    known = KNOWN_CONCEPTS_NOTE.replace("{names}", ", ".join(known_concepts[:20])) if known_concepts else ""
+    prompt = (BANK_PROMPT.replace("{known}", known).replace("{n}", str(count))
+              .replace("{easy}", str(easy)).replace("{normal}", str(normal)).replace("{hard}", str(hard)))
+    if page_text.strip():
+        prompt += PAGE_TEXT_NOTE.replace("{text}", page_text.strip()[:4000])
+    response = generate([prompt, page_image])
+    data = _parse(response.text)
+    concepts = [
+        {"name": str(c.get("name", "")).strip(), "summary": _plain_math(str(c.get("summary", "")))}
+        for c in data.get("concepts") or [] if isinstance(c, dict) and str(c.get("name", "")).strip()
+    ]
+    problems, dropped = _clean_problems(data.get("problems"), [c["name"] for c in concepts])
+    order = {lv: i for i, lv in enumerate(LEVELS)}
+    problems.sort(key=lambda p: order[p["level"]])
+    has = bool(data.get("has_problems", True)) and bool(problems or dropped)
+    if has and not problems:
+        raise ProblemMakerError("AI가 만든 문제가 모두 검사에서 걸러졌어요.")
+    return {
+        "unit": str(data.get("unit", "")).strip() or "이 쪽",
+        "has_problems": has,
+        "concepts": concepts,
         "problems": problems,
         "dropped": dropped,
         "solver": response.provider,
