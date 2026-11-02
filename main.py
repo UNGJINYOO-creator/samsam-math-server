@@ -247,3 +247,26 @@ def update_apply():
     if bank_builder.status().get("running"):
         bank_builder.stop()  # 다시 켜지면 문제 은행은 이어서 만들 수 있다
     return updater.apply()
+
+
+# ───────────────────────── 수확중 앱으로 문제 은행 보내기 ─────────────────────────
+
+
+@app.get("/api/bank/export")
+def bank_export():
+    """수확중 앱(태블릿)이 '마클리에서 씨앗 가져오기'로 받아가는 문제 은행 전체.
+    정답·풀이까지 들어 있으니 집 와이파이 안에서만 쓴다."""
+    keys = ("bank_id", "concept", "type", "level", "question", "choices", "answer", "hint", "explanation", "steps")
+    books: dict[str, dict] = {}
+    for page in engine.bank_pages():
+        if page["status"] != "ok" or not page["problems"]:
+            continue
+        book = books.setdefault(page["book"], {"book": page["book"], "title": Path(page["book"]).stem, "pages": []})
+        book["pages"].append({
+            "page": page["page"],
+            "unit": page["unit"],
+            "problems": [{k: p.get(k, "" if k not in ("choices", "steps") else []) for k in keys} for p in page["problems"]],
+        })
+    for b in books.values():
+        b["pages"].sort(key=lambda x: x["page"])
+    return {"books": list(books.values())}
