@@ -82,6 +82,9 @@ run_live.bat 더블클릭
   python scripts/check_nvidia.py --pdf 문제집.pdf --page 50
   ```
 - 키가 둘 다 없거나 둘 다 한도에 걸리면, 책 뒤 정답을 보고 맞았어요/틀렸어요로 직접 채점한다.
+- PDF에 들어있는 글자(OCR)로 풀어도 될지 확인 (AI 안 씀, 무료): `run_ocr_check.bat` 더블클릭
+  → 14쪽~끝에서 무작위 5쪽을 뽑아 문제별 글자를 꺼내고, 기호 깨짐·그림/분수선 여부를 표시한다.
+  특정 쪽: `python scripts/show_text.py --pages 20 74 105`. 결과 전체는 `ocr_check.txt`.
 
 ## 2. 수동/단계별 방식 (즉석 모드가 안 맞을 때, 또는 세밀한 보정이 필요할 때)
 
